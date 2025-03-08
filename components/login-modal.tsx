@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { getSpotifyAuthUrl } from "@/lib/spotify-client" // Updated import
+import { getSpotifyAuthUrl } from "@/lib/spotify-client" 
 import { Music2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
