@@ -1,5 +1,9 @@
 
-const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
+const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || ""
+
+// Add console log to debug
+console.log("Client ID:", CLIENT_ID)
+
 const REDIRECT_URI = typeof window !== "undefined" ? `${window.location.origin}` : "http://localhost:3000"
 
 const SCOPES = [
@@ -17,8 +21,15 @@ const SCOPES = [
 ]
 
 export function getSpotifyAuthUrl() {
+  // Check if CLIENT_ID is available
+  if (!CLIENT_ID) {
+    console.error("Spotify Client ID is missing. Please check your environment variables.")
+    // You could show an error message to the user here
+    return "#error-missing-client-id"
+  }
+
   const params = new URLSearchParams({
-    client_id: CLIENT_ID as string,
+    client_id: CLIENT_ID,
     response_type: "code",
     redirect_uri: REDIRECT_URI,
     scope: SCOPES.join(" "),
@@ -35,4 +46,3 @@ export function formatDuration(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`
 }
 
-console.log('Client ID:', process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID)

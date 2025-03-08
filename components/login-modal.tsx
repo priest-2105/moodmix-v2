@@ -3,8 +3,9 @@
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { getSpotifyAuthUrl } from "@/lib/spotify-client" 
-import { Music2 } from "lucide-react"
+import { getSpotifyAuthUrl } from "@/lib/spotify-client" // Updated import
+import { Music2, AlertCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface LoginModalProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ interface LoginModalProps {
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Check if user is authenticated
   useEffect(() => {
@@ -23,7 +25,20 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
   const handleLogin = () => {
     setIsLoading(true)
-    window.location.href = getSpotifyAuthUrl()
+    setError(null)
+
+    const authUrl = getSpotifyAuthUrl()
+
+    // Check if there was an error generating the auth URL
+    if (authUrl.includes("error")) {
+      setError(
+        "Failed to generate Spotify authorization URL. Please check if the Spotify Client ID is properly configured.",
+      )
+      setIsLoading(false)
+      return
+    }
+
+    window.location.href = authUrl
   }
 
   // Prevent closing the modal if not authenticated
@@ -60,6 +75,14 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           <div className="flex justify-center">
             <Music2 className="h-20 w-20 text-[#00FFFF]" />
           </div>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <p className="text-center text-gray-400">
             Create personalized playlists based on your mood and discover new music tailored to your taste.
           </p>
