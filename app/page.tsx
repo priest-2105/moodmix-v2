@@ -5,12 +5,14 @@ import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
-import { getSpotifyToken, getUserProfile, getUserPlaylists } from "@/lib/spotify" // Server functions
+import { getSpotifyToken, getUserProfile, getUserPlaylists } from "@/lib/spotify"
 import LoginModal from "@/components/login-modal"
 import CreatePlaylistModal from "@/components/create-playlist-modal"
 import PlaylistCard from "@/components/playlist-card"
 import MusicPlayer from "@/components/music-player"
 import Sidebar from "@/components/sidebar"
+import PlaylistView from "@/components/playlist-view"
+import UserProfileButton from "@/components/user-profile-button"
 import type { Playlist, SpotifyUser } from "@/types/spotify"
 import { saveUserPreferences } from "@/lib/supabase/user"
 import { createClient } from "@/lib/supabase/client"
@@ -28,11 +30,8 @@ export default function Home() {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
   const [currentlyPlaying, setCurrentlyPlaying] = useState<any>(null)
+  const [showPlaylistView, setShowPlaylistView] = useState(false)
 
-
-  console.log('Client ID:', process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID)
-
-  
   // Handle authentication flow
   useEffect(() => {
     const handleAuth = async () => {
@@ -46,7 +45,7 @@ export default function Home() {
             localStorage.setItem("spotify_refresh_token", tokenResponse.refresh_token)
             localStorage.setItem("spotify_token_expiry", (Date.now() + tokenResponse.expires_in * 1000).toString())
             setIsAuthenticated(true)
-            setIsLoginModalOpen(false) // Close the login modal after successful authentication
+            setIsLoginModalOpen(false)
 
             // Get user profile
             const userProfile = await getUserProfile(tokenResponse.access_token)
@@ -68,7 +67,6 @@ export default function Home() {
           console.error("Authentication error:", error)
         } finally {
           setIsLoading(false)
-          // Remove code from URL to prevent re-authentication on refresh
           window.history.replaceState({}, document.title, window.location.pathname)
         }
       }
@@ -81,7 +79,7 @@ export default function Home() {
     if (storedToken && tokenExpiry && Number.parseInt(tokenExpiry) > Date.now()) {
       setAccessToken(storedToken)
       setIsAuthenticated(true)
-      setIsLoginModalOpen(false) // Ensure login modal is closed if already authenticated
+      setIsLoginModalOpen(false)
 
       // Load user data and playlists
       const loadUserData = async () => {
@@ -94,13 +92,12 @@ export default function Home() {
           setPlaylists(userPlaylists)
         } catch (error) {
           console.error("Error loading user data:", error)
-          // Token might be invalid, clear and re-authenticate
           localStorage.removeItem("spotify_access_token")
           localStorage.removeItem("spotify_refresh_token")
           localStorage.removeItem("spotify_token_expiry")
           setIsAuthenticated(false)
           setAccessToken(null)
-          setIsLoginModalOpen(true) // Show login modal if authentication fails
+          setIsLoginModalOpen(true)
         } finally {
           setIsLoading(false)
         }
@@ -110,7 +107,6 @@ export default function Home() {
     } else if (code) {
       handleAuth()
     } else {
-      // No token and no code, ensure login modal is shown
       setIsLoginModalOpen(true)
     }
   }, [code])
@@ -121,6 +117,13 @@ export default function Home() {
 
   const handlePlaylistSelect = (playlist: Playlist) => {
     setSelectedPlaylist(playlist)
+    setShowPlaylistView(true)
+    // Scroll to top when selecting a playlist
+    window.scrollTo(0, 0)
+  }
+
+  const handleBackToHome = () => {
+    setShowPlaylistView(false)
   }
 
   const handleLogout = () => {
@@ -133,10 +136,10 @@ export default function Home() {
     setPlaylists([])
     setSelectedPlaylist(null)
     setCurrentlyPlaying(null)
-    setIsLoginModalOpen(true) // Show login modal after logout
+    setShowPlaylistView(false)
+    setIsLoginModalOpen(true)
   }
 
-  // Function to close login modal - will only work if authenticated
   const handleCloseLoginModal = () => {
     if (isAuthenticated) {
       setIsLoginModalOpen(false)
@@ -146,13 +149,18 @@ export default function Home() {
   return (
     <div className="h-screen bg-[#1a1a1a] text-white overflow-hidden">
       <div className={`flex h-full ${isLoginModalOpen ? "blur-sm" : ""}`}>
-        <Sidebar />
+        <Sidebar playlists={playlists} onPlaylistSelect={handlePlaylistSelect} />
 
         <main className="flex-1 overflow-hidden">
-          <div className="px-6 py-4">
-            <header className="flex items-center justify-between mb-8">
+          <div className="h-full flex flex-col">
+            <header className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="text-white">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white"
+                  onClick={showPlaylistView ? handleBackToHome : undefined}
+                >
                   <ChevronLeft className="h-6 w-6" />
                 </Button>
                 <Button variant="ghost" size="icon" className="text-white">
@@ -170,13 +178,8 @@ export default function Home() {
                     <Plus className="h-4 w-4 mr-2" />
                     Create Playlist
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="bg-white/10 text-white border-0 hover:bg-white/20"
-                    onClick={handleLogout}
-                  >
-                    Logout
-                  </Button>
+
+                  <UserProfileButton user={user} onLogout={handleLogout} />
                 </div>
               ) : (
                 <Button onClick={() => setIsLoginModalOpen(true)} className="bg-white text-black hover:bg-white/90">
@@ -185,94 +188,110 @@ export default function Home() {
               )}
             </header>
 
-            <ScrollArea className="h-[calc(100vh-8rem)]">
-              {isAuthenticated && (
-                <div className="space-y-8 pb-8">
-                  <section>
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl font-bold">New For You</h2>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                      {playlists.slice(0, 4).map((playlist) => (
-                        <PlaylistCard
-                          key={playlist.id}
-                          playlist={playlist}
-                          onClick={() => handlePlaylistSelect(playlist)}
-                          isSelected={selectedPlaylist?.id === playlist.id}
-                          label="NEW FOR YOU"
-                        />
-                      ))}
-                    </div>
-                  </section>
+            {isAuthenticated && (
+              <div className="flex-1 overflow-hidden">
+                {showPlaylistView && selectedPlaylist ? (
+                  <PlaylistView
+                    playlist={selectedPlaylist}
+                    accessToken={accessToken}
+                    onTrackPlay={setCurrentlyPlaying}
+                  />
+                ) : (
+                  <ScrollArea className="h-full">
+                    <div className="space-y-8 p-6">
+                      <section>
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-2xl font-bold">New For You</h2>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                          {playlists.slice(0, 4).map((playlist) => (
+                            <PlaylistCard
+                              key={playlist.id}
+                              playlist={playlist}
+                              onClick={() => handlePlaylistSelect(playlist)}
+                              isSelected={selectedPlaylist?.id === playlist.id}
+                              label="NEW FOR YOU"
+                            />
+                          ))}
+                        </div>
+                      </section>
 
-                  <section>
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl font-bold">Recently Played</h2>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                      {recentPlaylists.map((playlist) => (
-                        <PlaylistCard
-                          key={playlist.id}
-                          playlist={playlist}
-                          onClick={() => handlePlaylistSelect(playlist)}
-                          isSelected={selectedPlaylist?.id === playlist.id}
-                        />
-                      ))}
-                    </div>
-                  </section>
+                      <section>
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-2xl font-bold">Recently Played</h2>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                          {recentPlaylists.map((playlist) => (
+                            <PlaylistCard
+                              key={playlist.id}
+                              playlist={playlist}
+                              onClick={() => handlePlaylistSelect(playlist)}
+                              isSelected={selectedPlaylist?.id === playlist.id}
+                            />
+                          ))}
+                        </div>
+                      </section>
 
-                  <section>
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-2xl font-bold">Made For You</h2>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronLeft className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-white">
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <section>
+                        <div className="flex items-center justify-between mb-4">
+                          <h2 className="text-2xl font-bold">Made For You</h2>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-white">
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                          {playlists.slice(-4).map((playlist) => (
+                            <PlaylistCard
+                              key={playlist.id}
+                              playlist={playlist}
+                              onClick={() => handlePlaylistSelect(playlist)}
+                              isSelected={selectedPlaylist?.id === playlist.id}
+                              label="BASED ON YOUR LIKES"
+                            />
+                          ))}
+                        </div>
+                      </section>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                      {playlists.slice(-4).map((playlist) => (
-                        <PlaylistCard
-                          key={playlist.id}
-                          playlist={playlist}
-                          onClick={() => handlePlaylistSelect(playlist)}
-                          isSelected={selectedPlaylist?.id === playlist.id}
-                          label="BASED ON YOUR LIKES"
-                        />
-                      ))}
-                    </div>
-                  </section>
-                </div>
-              )}
-            </ScrollArea>
+                  </ScrollArea>
+                )}
+              </div>
+            )}
           </div>
         </main>
       </div>
 
-      {selectedPlaylist && (
+      {currentlyPlaying && (
         <div
-          className={`fixed bottom-0 left-0 right-0 h-20 bg-[#282828] border-t border-white/10 ${isLoginModalOpen ? "blur-sm" : ""}`}
+          className={`fixed bottom-0 left-0 right-0 h-20 bg-[#282828] border-t border-white/10 ${
+            isLoginModalOpen ? "blur-sm" : ""
+          }`}
         >
-          <MusicPlayer playlistId={selectedPlaylist.id} accessToken={accessToken} onTrackPlay={setCurrentlyPlaying} />
+          <MusicPlayer
+            playlistId={selectedPlaylist?.id || ""}
+            accessToken={accessToken}
+            onTrackPlay={setCurrentlyPlaying}
+          />
         </div>
       )}
 
