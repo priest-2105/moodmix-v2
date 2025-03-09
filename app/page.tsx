@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
 import { getSpotifyToken, getUserProfile, getUserPlaylists } from "@/lib/spotify"
+import { Toaster } from "@/components/ui/toaster"
 import LoginModal from "@/components/login-modal"
 import CreatePlaylistModal from "@/components/create-playlist-modal"
 import PlaylistCard from "@/components/playlist-card"
@@ -30,6 +31,7 @@ export default function Home() {
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
   const [currentlyPlaying, setCurrentlyPlaying] = useState<any>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
   const [showPlaylistView, setShowPlaylistView] = useState(false)
 
   // Handle authentication flow
@@ -126,6 +128,27 @@ export default function Home() {
     setShowPlaylistView(false)
   }
 
+  const handleTrackPlay = (track: any) => {
+    setCurrentlyPlaying(track)
+    setIsPlaying(true)
+  }
+
+  const handlePlayPause = () => {
+    setIsPlaying(!isPlaying)
+  }
+
+  const handleNext = useCallback(() => {
+    // This would be implemented with the actual Spotify SDK
+    // For now, we'll just toggle the play state
+    console.log("Next track")
+  }, [])
+
+  const handlePrevious = useCallback(() => {
+    // This would be implemented with the actual Spotify SDK
+    // For now, we'll just toggle the play state
+    console.log("Previous track")
+  }, [])
+
   const handleLogout = () => {
     localStorage.removeItem("spotify_access_token")
     localStorage.removeItem("spotify_refresh_token")
@@ -136,6 +159,7 @@ export default function Home() {
     setPlaylists([])
     setSelectedPlaylist(null)
     setCurrentlyPlaying(null)
+    setIsPlaying(false)
     setShowPlaylistView(false)
     setIsLoginModalOpen(true)
   }
@@ -191,11 +215,7 @@ export default function Home() {
             {isAuthenticated && (
               <div className="flex-1 overflow-hidden">
                 {showPlaylistView && selectedPlaylist ? (
-                  <PlaylistView
-                    playlist={selectedPlaylist}
-                    accessToken={accessToken}
-                    onTrackPlay={setCurrentlyPlaying}
-                  />
+                  <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="space-y-8 p-6">
@@ -290,7 +310,12 @@ export default function Home() {
           <MusicPlayer
             playlistId={selectedPlaylist?.id || ""}
             accessToken={accessToken}
-            onTrackPlay={setCurrentlyPlaying}
+            onTrackPlay={handleTrackPlay}
+            currentTrack={currentlyPlaying}
+            isPlaying={isPlaying}
+            onPlayPause={handlePlayPause}
+            onNext={handleNext}
+            onPrevious={handlePrevious}
           />
         </div>
       )}
@@ -308,6 +333,8 @@ export default function Home() {
           setSelectedPlaylist(newPlaylist)
         }}
       />
+
+      <Toaster />
     </div>
   )
 }
