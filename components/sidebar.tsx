@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { Home, Search, Library, Music2, Radio, User2 } from "lucide-react"
+import { Home, Search, Music2, Radio, User2 } from "lucide-react"
 import type { Playlist } from "@/types/spotify"
 
 interface SidebarProps {
@@ -43,7 +43,7 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
             Search
           </Button>
           <Button variant="ghost" size="lg" className="w-full justify-start text-white hover:bg-white/10">
-            <Library className="mr-3 h-5 w-5" />
+            <Radio className="mr-3 h-5 w-5" />
             Your Moods
           </Button>
         </div>
