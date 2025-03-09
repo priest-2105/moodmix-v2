@@ -12,6 +12,7 @@ export interface SpotifyUser {
   followers?: {
     total: number
   }
+  last_login?: string
 }
 
 export interface Playlist {
@@ -61,6 +62,7 @@ export interface Track {
   duration_ms: number
   explicit: boolean
   popularity: number
+  preview_url?: string
   album: {
     id: string
     name: string
