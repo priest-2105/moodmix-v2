@@ -17,6 +17,10 @@ import UserProfileButton from "@/components/user-profile-button"
 import type { Playlist, SpotifyUser } from "@/types/spotify"
 import { saveUserPreferences } from "@/lib/supabase/user"
 import { createClient } from "@/lib/supabase/client"
+import { useNavigationHistory } from "@/hooks/use-navigation-history"
+import SearchBar from "@/components/search-bar"
+import SearchResults from "@/components/search-results"
+import { toast } from "@/components/ui/use-toast"
 
 export default function Home() {
   const searchParams = useSearchParams()
@@ -33,6 +37,26 @@ export default function Home() {
   const [currentlyPlaying, setCurrentlyPlaying] = useState<any>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showPlaylistView, setShowPlaylistView] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isSearching, setIsSearching] = useState(false)
+  const [availableMoods] = useState([
+    "Happy",
+    "Sad",
+    "Energetic",
+    "Relaxed",
+    "Focused",
+    "Workout",
+    "Party",
+    "Chill",
+    "Study",
+    "Sleep",
+    "Morning",
+    "Evening",
+    "Commute",
+    "Travel",
+    "Romantic",
+  ])
+  const navigation = useNavigationHistory({ type: "home" })
 
   // Handle authentication flow
   useEffect(() => {
@@ -120,12 +144,27 @@ export default function Home() {
   const handlePlaylistSelect = (playlist: Playlist) => {
     setSelectedPlaylist(playlist)
     setShowPlaylistView(true)
+    setIsSearching(false)
+    navigation.navigate({ type: "playlist", id: playlist.id, data: playlist })
     // Scroll to top when selecting a playlist
     window.scrollTo(0, 0)
   }
 
+  const handleMoodSelect = (mood: string) => {
+    // In a real app, you would filter playlists by mood
+    // For now, we'll just show a toast notification
+    toast({
+      title: `${mood} Mood Selected`,
+      description: `Showing playlists with ${mood.toLowerCase()} mood`,
+    })
+    navigation.navigate({ type: "mood", id: mood })
+    setIsSearching(false)
+  }
+
   const handleBackToHome = () => {
     setShowPlaylistView(false)
+    setIsSearching(false)
+    navigation.navigate({ type: "home" })
   }
 
   const handleTrackPlay = (track: any) => {
@@ -183,13 +222,67 @@ export default function Home() {
                   variant="ghost"
                   size="icon"
                   className="text-white"
-                  onClick={showPlaylistView ? handleBackToHome : undefined}
+                  onClick={() => {
+                    const prevState = navigation.back()
+                    if (prevState.type === "home") {
+                      setShowPlaylistView(false)
+                      setIsSearching(false)
+                    } else if (prevState.type === "playlist" && prevState.data) {
+                      setSelectedPlaylist(prevState.data)
+                      setShowPlaylistView(true)
+                      setIsSearching(false)
+                    } else if (prevState.type === "search") {
+                      setIsSearching(true)
+                      setShowPlaylistView(false)
+                      setSearchQuery(prevState.id || "")
+                    }
+                  }}
+                  disabled={!navigation.canGoBack}
                 >
-                  <ChevronLeft className="h-6 w-6" />
+                  <ChevronLeft className={`h-6 w-6 ${!navigation.canGoBack ? "opacity-50" : ""}`} />
                 </Button>
-                <Button variant="ghost" size="icon" className="text-white">
-                  <ChevronRight className="h-6 w-6" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white"
+                  onClick={() => {
+                    const nextState = navigation.forward()
+                    if (nextState.type === "home") {
+                      setShowPlaylistView(false)
+                      setIsSearching(false)
+                    } else if (nextState.type === "playlist" && nextState.data) {
+                      setSelectedPlaylist(nextState.data)
+                      setShowPlaylistView(true)
+                      setIsSearching(false)
+                    } else if (nextState.type === "search") {
+                      setIsSearching(true)
+                      setShowPlaylistView(false)
+                      setSearchQuery(nextState.id || "")
+                    }
+                  }}
+                  disabled={!navigation.canGoForward}
+                >
+                  <ChevronRight className={`h-6 w-6 ${!navigation.canGoForward ? "opacity-50" : ""}`} />
                 </Button>
+
+                {isAuthenticated && (
+                  <div className="ml-4 w-64">
+                    <SearchBar
+                      onSearch={(query) => {
+                        setSearchQuery(query)
+                        if (query) {
+                          setIsSearching(true)
+                          if (navigation.current.type !== "search" || navigation.current.id !== query) {
+                            navigation.navigate({ type: "search", id: query })
+                          }
+                        } else {
+                          setIsSearching(false)
+                        }
+                      }}
+                      placeholder="Search playlists and moods..."
+                    />
+                  </div>
+                )}
               </div>
 
               {isAuthenticated ? (
@@ -214,7 +307,16 @@ export default function Home() {
 
             {isAuthenticated && (
               <div className="flex-1 overflow-hidden">
-                {showPlaylistView && selectedPlaylist ? (
+                {isSearching ? (
+                  <SearchResults
+                    query={searchQuery}
+                    playlists={playlists}
+                    moods={availableMoods}
+                    onPlaylistSelect={handlePlaylistSelect}
+                    onMoodSelect={handleMoodSelect}
+                    selectedPlaylistId={selectedPlaylist?.id}
+                  />
+                ) : showPlaylistView && selectedPlaylist ? (
                   <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : (
                   <ScrollArea className="h-full">
