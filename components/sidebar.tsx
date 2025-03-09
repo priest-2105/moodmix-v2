@@ -44,7 +44,7 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
           </Button>
           <Button variant="ghost" size="lg" className="w-full justify-start text-white hover:bg-white/10">
             <Library className="mr-3 h-5 w-5" />
-            Your Library
+            Your Moods
           </Button>
         </div>
 
