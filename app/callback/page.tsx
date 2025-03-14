@@ -7,11 +7,19 @@ import { getSpotifyToken } from "@/lib/spotify"
 export default function CallbackPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const code = searchParams.get("code")
-  const error = searchParams.get("error")
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Check if searchParams is available
+      if (!searchParams) {
+        console.error("Search params not available")
+        router.push("/?auth_error=no_search_params")
+        return
+      }
+
+      const code = searchParams.get("code")
+      const error = searchParams.get("error")
+
       if (error) {
         console.error("Spotify auth error:", error)
         router.push("/?auth_error=" + encodeURIComponent(error))
@@ -47,7 +55,7 @@ export default function CallbackPage() {
     }
 
     handleCallback()
-  }, [code, error, router])
+  }, [searchParams, router])
 
   return (
     <div className="h-screen bg-[#1a1a1a] text-white flex items-center justify-center">

@@ -18,18 +18,20 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const searchParams = useSearchParams()
-  const authError = searchParams.get("auth_error")
 
-  // Check if user is authenticated
+  // Check if user is authenticated and handle auth errors
   useEffect(() => {
     const token = localStorage.getItem("spotify_access_token")
     setIsAuthenticated(!!token)
 
     // Check for auth errors from the callback
-    if (authError) {
-      setError(`Authentication failed: ${decodeURIComponent(authError)}`)
+    if (searchParams) {
+      const authError = searchParams.get("auth_error")
+      if (authError) {
+        setError(`Authentication failed: ${decodeURIComponent(authError)}`)
+      }
     }
-  }, [authError])
+  }, [searchParams])
 
   const handleLogin = () => {
     setIsLoading(true)
