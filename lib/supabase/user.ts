@@ -6,6 +6,12 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string
 
 export async function saveUserPreferences(supabase: any, userId: string, preferences: any) {
+  console.log("Saving user preferences to Supabase:", {
+    userId,
+    // Log what fields we're storing, but not their values
+    fields: Object.keys(preferences),
+  })
+
   const { data, error } = await supabase
     .from("users")
     .upsert({

@@ -2,21 +2,36 @@
 
 // lib/spotify.ts - Server-side functions with 'use server' directive
 
+// Only use environment variables, never hardcode credentials
 const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || ""
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || ""
-// Update the REDIRECT_URI to match what's in spotify-client.ts
 const REDIRECT_URI = "http://localhost:3000/callback"
 
 // Improve error handling in getSpotifyToken
 export async function getSpotifyToken(code: string) {
   try {
+    if (!code) {
+      throw new Error("Authorization code is required")
+    }
+
+    if (!CLIENT_ID || !CLIENT_SECRET) {
+      console.error("Missing Spotify credentials:", {
+        hasClientId: !!CLIENT_ID,
+        hasClientSecret: !!CLIENT_SECRET,
+      })
+      throw new Error("Spotify API credentials are missing")
+    }
+
+    console.log("Starting token exchange with code:", code.substring(0, 10) + "...")
+    console.log("Using redirect URI:", REDIRECT_URI)
+
     const params = new URLSearchParams({
       grant_type: "authorization_code",
       code,
       redirect_uri: REDIRECT_URI,
     })
 
-    console.log("Requesting token with params:", params.toString())
+    console.log("Making request to Spotify token endpoint...")
 
     const response = await fetch("https://accounts.spotify.com/api/token", {
       method: "POST",
@@ -27,14 +42,24 @@ export async function getSpotifyToken(code: string) {
       body: params.toString(),
     })
 
+    console.log("Token response status:", response.status, response.statusText)
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Token error response:", errorText)
-      throw new Error(`Failed to get Spotify token: ${response.status} ${response.statusText}`)
+      let errorText = "Unknown error"
+      try {
+        errorText = await response.text()
+        console.error("Token error response body:", errorText)
+      } catch (e) {
+        console.error("Could not read error response body")
+      }
+
+      throw new Error(`Failed to get Spotify token: ${response.status} ${response.statusText} - ${errorText}`)
     }
 
     const data = await response.json()
-    console.log("Token response success:", { access_token: "REDACTED", expires_in: data.expires_in })
+    console.log("Token exchange successful, received token type:", data.token_type)
+    console.log("Token expires in:", data.expires_in, "seconds")
+
     return data
   } catch (error) {
     console.error("Error in getSpotifyToken:", error)
