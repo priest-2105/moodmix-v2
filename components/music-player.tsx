@@ -16,6 +16,7 @@ interface MusicPlayerProps {
   onPlayPause: () => void
   onNext: () => void
   onPrevious: () => void
+  playerState?: any // Add this prop to receive player state
 }
 
 export default function MusicPlayer({
@@ -27,16 +28,26 @@ export default function MusicPlayer({
   onPlayPause,
   onNext,
   onPrevious,
+  playerState,
 }: MusicPlayerProps) {
   const [volume, setVolume] = useState(0.7)
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [isSeeking, setIsSeeking] = useState(false)
   const progressInterval = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
 
-  // Update progress bar
+  // Update progress and duration from player state
   useEffect(() => {
-    if (isPlaying) {
+    if (playerState && !isSeeking) {
+      setProgress(playerState.position || 0)
+      setDuration(playerState.duration || 0)
+    }
+  }, [playerState, isSeeking])
+
+  // Update progress bar when playing
+  useEffect(() => {
+    if (isPlaying && !isSeeking) {
       // Clear any existing interval
       if (progressInterval.current) {
         clearInterval(progressInterval.current)
@@ -64,30 +75,67 @@ export default function MusicPlayer({
         clearInterval(progressInterval.current)
       }
     }
-  }, [isPlaying, duration, progress])
+  }, [isPlaying, duration, progress, isSeeking])
 
   // Set duration when current track changes
   useEffect(() => {
     if (currentTrack) {
       setDuration(currentTrack.duration_ms || 0)
-      setProgress(0)
+      if (!playerState) {
+        setProgress(0)
+      }
     }
-  }, [currentTrack])
+  }, [currentTrack, playerState])
 
-  const handleVolumeChange = (value: number[]) => {
+  const handleVolumeChange = async (value: number[]) => {
     const newVolume = value[0]
     setVolume(newVolume)
 
-    // In a real implementation, you would update the Spotify player volume
-    // This would be done through the Spotify Web Playback SDK
+    // Update Spotify player volume if we have access token
+    if (accessToken) {
+      try {
+        await fetch("https://api.spotify.com/v1/me/player/volume", {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            volume_percent: Math.round(newVolume * 100),
+          }),
+        })
+      } catch (error) {
+        console.error("Error setting volume:", error)
+      }
+    }
   }
 
-  const handleSeek = (value: number[]) => {
+  const handleSeek = async (value: number[]) => {
     const seekTime = value[0]
+    setIsSeeking(true)
     setProgress(seekTime)
 
-    // In a real implementation, you would seek the Spotify player
-    // This would be done through the Spotify Web Playback SDK
+    // Seek in Spotify player if we have access token
+    if (accessToken) {
+      try {
+        await fetch("https://api.spotify.com/v1/me/player/seek", {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+          },
+          params: {
+            position_ms: Math.round(seekTime),
+          },
+        })
+      } catch (error) {
+        console.error("Error seeking:", error)
+      } finally {
+        setIsSeeking(false)
+      }
+    } else {
+      setIsSeeking(false)
+    }
   }
 
   if (!currentTrack) return null
