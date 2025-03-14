@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { getSpotifyAuthUrl } from "@/lib/spotify-client" 
+import { getSpotifyAuthUrl } from "@/lib/spotify-client"
 import { Music2, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
@@ -16,12 +17,19 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+  const authError = searchParams.get("auth_error")
 
   // Check if user is authenticated
   useEffect(() => {
     const token = localStorage.getItem("spotify_access_token")
     setIsAuthenticated(!!token)
-  }, [])
+
+    // Check for auth errors from the callback
+    if (authError) {
+      setError(`Authentication failed: ${decodeURIComponent(authError)}`)
+    }
+  }, [authError])
 
   const handleLogin = () => {
     setIsLoading(true)
