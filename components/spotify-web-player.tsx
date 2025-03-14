@@ -37,17 +37,26 @@ export default function SpotifyWebPlayer({
   useEffect(() => {
     if (!accessToken) return
 
+    // Check if script is already loaded
+    if (document.getElementById("spotify-player")) {
+      if (window.Spotify) {
+        initializePlayer(accessToken)
+      }
+      return
+    }
+
     const script = document.createElement("script")
+    script.id = "spotify-player"
     script.src = "https://sdk.scdn.co/spotify-player.js"
     script.async = true
     document.body.appendChild(script)
 
     window.onSpotifyWebPlaybackSDKReady = () => {
+      console.log("Spotify Web Playback SDK Ready")
       initializePlayer(accessToken)
     }
 
     return () => {
-      document.body.removeChild(script)
       if (player) {
         player.disconnect()
       }
@@ -57,6 +66,8 @@ export default function SpotifyWebPlayer({
   // Initialize the Spotify Web Player
   const initializePlayer = useCallback(
     (token: string) => {
+      console.log("Initializing Spotify Web Player...")
+
       const spotifyPlayer = new window.Spotify.Player({
         name: "Moodmix Web Player",
         getOAuthToken: (cb: (token: string) => void) => {
@@ -98,10 +109,17 @@ export default function SpotifyWebPlayer({
         console.log("Spotify Web Player ready with device ID:", device_id)
         setDeviceId(device_id)
         setIsInitializing(false)
-        onPlayerReady()
 
-        // Transfer playback to this device
+        // Transfer playback to this device immediately
         transferPlayback(token, device_id)
+          .then(() => {
+            console.log("Playback transferred to web player")
+            onPlayerReady()
+          })
+          .catch((err) => {
+            console.error("Error transferring playback:", err)
+            onError("Failed to transfer playback to web player")
+          })
       })
 
       // Not Ready
@@ -112,21 +130,49 @@ export default function SpotifyWebPlayer({
 
       // Player State Changed
       spotifyPlayer.addListener("player_state_changed", (state: any) => {
-        if (!state) return
+        if (!state) {
+          console.log("No player state available")
+          return
+        }
+
+        console.log("Player state changed:", {
+          track: state.track_window.current_track.name,
+          paused: state.paused,
+          position: state.position,
+          duration: state.duration,
+        })
+
         onPlayerStateChanged(state)
       })
 
       // Connect the player
-      spotifyPlayer.connect()
+      console.log("Connecting to Spotify...")
+      spotifyPlayer
+        .connect()
+        .then((success: boolean) => {
+          if (success) {
+            console.log("Connected to Spotify successfully")
+          } else {
+            console.error("Failed to connect to Spotify")
+            onError("Failed to connect to Spotify")
+          }
+        })
+        .catch((err: any) => {
+          console.error("Error connecting to Spotify:", err)
+          onError(`Error connecting to Spotify: ${err.message || "Unknown error"}`)
+        })
+
       setPlayer(spotifyPlayer)
     },
-    [onError, onPlayerReady, onPlayerStateChanged],
+    [onError, onPlayerReady, onPlayerStateChanged, toast],
   )
 
   // Transfer playback to this device
   const transferPlayback = async (token: string, deviceId: string) => {
     try {
-      await fetch("https://api.spotify.com/v1/me/player", {
+      console.log("Transferring playback to device:", deviceId)
+
+      const response = await fetch("https://api.spotify.com/v1/me/player", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -137,43 +183,56 @@ export default function SpotifyWebPlayer({
           play: false,
         }),
       })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Error transferring playback:", response.status, errorText)
+        throw new Error(`Failed to transfer playback: ${response.status} ${response.statusText}`)
+      }
+
+      return true
     } catch (error) {
       console.error("Error transferring playback:", error)
+      throw error
     }
   }
 
   // Control playback based on props
   useEffect(() => {
-    if (!player || !deviceId || !accessToken || !currentTrackUri) return
+    if (!player || !deviceId || !accessToken) return
 
-    const playTrack = async () => {
+    const handlePlayback = async () => {
       try {
-        await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({
-            uris: [currentTrackUri],
-          }),
-        })
+        if (isPlaying && currentTrackUri) {
+          console.log("Playing track:", currentTrackUri)
+
+          // Play the track on the web player
+          await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({
+              uris: [currentTrackUri],
+            }),
+          })
+        } else if (!isPlaying && player) {
+          console.log("Pausing playback")
+          player.pause()
+        }
       } catch (error) {
-        console.error("Error playing track:", error)
+        console.error("Error controlling playback:", error)
         toast({
           title: "Playback Error",
-          description: "Failed to play the selected track. Please try again.",
+          description: "Failed to control playback. Please try again.",
           variant: "destructive",
         })
       }
     }
 
-    if (isPlaying && currentTrackUri) {
-      playTrack()
-    } else if (!isPlaying && player) {
-      player.pause()
-    }
-  }, [currentTrackUri, isPlaying, player, deviceId, accessToken])
+    handlePlayback()
+  }, [currentTrackUri, isPlaying, player, deviceId, accessToken, toast])
 
   if (isInitializing) {
     return (
