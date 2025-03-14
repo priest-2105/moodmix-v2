@@ -9,6 +9,7 @@ import type { Playlist } from "@/types/spotify"
 import { getPlaylistTracks } from "@/lib/spotify"
 import { formatDuration } from "@/lib/spotify-client"
 import SpotifyWebPlayer, { getTrackUri } from "@/components/spotify-web-player"
+import MusicPlayer from "@/components/music-player"
 
 interface PlaylistViewProps {
   playlist: Playlist
@@ -344,6 +345,23 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
           )}
         </div>
       </ScrollArea>
+
+      {/* Music Player at the bottom */}
+      {currentTrack && (
+        <div className="fixed bottom-0 left-0 right-0 h-20 bg-[#282828] border-t border-white/10">
+          <MusicPlayer
+            playlistId={playlist.id}
+            accessToken={accessToken}
+            onTrackPlay={onTrackPlay}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onPlayPause={() => setIsPlaying(!isPlaying)}
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            playerState={playerState}  
+          />
+        </div>
+      )}
     </div>
   )
 }
