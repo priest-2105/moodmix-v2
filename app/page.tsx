@@ -110,10 +110,16 @@ export default function Home() {
             setIsLoginModalOpen(false)
 
             // Get user profile
-            try {
-              const userProfile = await getUserProfile(tokenResponse.access_token)
-              setUser(userProfile)
+            const userProfile = await getUserProfile(tokenResponse.access_token)
+            setUser(userProfile)
 
+            // Check if the user ID is a valid UUID before saving to Supabase
+            const isValidUUID = (uuid) => {
+              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+              return uuidRegex.test(uuid)
+            }
+
+            if (userProfile && userProfile.id && isValidUUID(userProfile.id)) {
               // Save minimal user data to Supabase
               try {
                 const supabase = createClient()
@@ -129,36 +135,29 @@ export default function Home() {
                 console.error("Supabase error:", supabaseError)
                 // Continue even if Supabase fails - this is optional functionality
               }
-
-              // Load user playlists
-              try {
-                setIsLoadingPlaylists(true)
-                const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
-                setPlaylists(userPlaylists)
-              } catch (playlistsError) {
-                console.error("Error loading playlists:", playlistsError)
-                toast({
-                  title: "Error loading playlists",
-                  description: "We couldn't load your playlists. Some features may be limited.",
-                  variant: "destructive",
-                })
-              } finally {
-                setIsLoadingPlaylists(false)
-              }
-            } catch (profileError) {
-              console.error("Error loading user profile:", profileError)
+            } else {
+              console.error("Invalid user ID format from Spotify:", userProfile?.id)
               toast({
-                title: "Authentication Error",
-                description: "We couldn't load your profile. Please try logging in again.",
+                title: "Warning",
+                description: "Your user ID format is not compatible with our database. Some features may be limited.",
                 variant: "destructive",
               })
-              // Reset auth state
-              localStorage.removeItem("spotify_access_token")
-              localStorage.removeItem("spotify_refresh_token")
-              localStorage.removeItem("spotify_token_expiry")
-              setIsAuthenticated(false)
-              setAccessToken(null)
-              setIsLoginModalOpen(true)
+            }
+
+            // Load user playlists
+            try {
+              setIsLoadingPlaylists(true)
+              const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
+              setPlaylists(userPlaylists)
+            } catch (playlistsError) {
+              console.error("Error loading playlists:", playlistsError)
+              toast({
+                title: "Error loading playlists",
+                description: "We couldn't load your playlists. Some features may be limited.",
+                variant: "destructive",
+              })
+            } finally {
+              setIsLoadingPlaylists(false)
             }
           }
         } catch (error) {

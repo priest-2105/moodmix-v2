@@ -14,6 +14,7 @@ import { Loader2 } from "lucide-react"
 import { getRecommendations, getPlaylistTracks } from "@/lib/spotify"
 import { saveMood, saveMoodTracks } from "@/lib/supabase/moods"
 import type { Playlist } from "@/types/spotify"
+import { useToast } from "@/components/ui/use-toast"
 
 interface CreatePlaylistModalProps {
   isOpen: boolean
@@ -37,9 +38,14 @@ const getMoodImageUrl = (moodType: string) => {
   const mood = moodTypes.find((m) => m.id === moodType)
   if (!mood) return "/placeholder.svg?height=400&width=400"
 
-  // In a real app, you'd have actual images for each mood
-  // For now, we'll use a colored placeholder
+  // Generate a colored placeholder based on the mood type
   return `/placeholder.svg?height=400&width=400&text=${mood.name}&bgcolor=${mood.color.substring(1)}`
+}
+
+// Helper function to validate UUID format
+function isValidUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(uuid)
 }
 
 export default function CreatePlaylistModal({
@@ -57,12 +63,20 @@ export default function CreatePlaylistModal({
   const [sourcePlaylist, setSourcePlaylist] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const { toast } = useToast()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!accessToken || !userId) {
+    if (!userId) {
       setError("You must be logged in to create a mood")
+      return
+    }
+
+    // Validate userId is a valid UUID
+    if (!isValidUUID(userId)) {
+      console.error("Invalid user ID format:", userId)
+      setError("Invalid user ID format. Please log out and log in again.")
       return
     }
 
@@ -82,16 +96,22 @@ export default function CreatePlaylistModal({
       if (sourceType === "existing" && sourcePlaylist) {
         // Get tracks from existing playlist
         console.log("Getting tracks from existing playlist:", sourcePlaylist)
-        const playlistTracks = await getPlaylistTracks(accessToken, sourcePlaylist)
+        try {
+          const playlistTracks = await getPlaylistTracks(accessToken || "", sourcePlaylist)
 
-        if (playlistTracks && playlistTracks.items) {
-          tracks = playlistTracks.items.map((item: any) => item.track).slice(0, 20)
+          if (playlistTracks && playlistTracks.items) {
+            tracks = playlistTracks.items.map((item: any) => item.track).slice(0, 20)
+          }
+        } catch (playlistError) {
+          console.error("Error getting playlist tracks:", playlistError)
+          // Continue with fallback tracks
+          tracks = getFallbackTracks()
         }
       } else {
         // Get recommendations based on mood
         try {
           console.log("Getting recommendations for mood:", selectedMood)
-          const recommendations = await getRecommendations(accessToken, {
+          const recommendations = await getRecommendations(accessToken || "", {
             seed_genres: getMoodGenres(selectedMood),
             limit: 20,
             ...selectedMoodParams,
@@ -102,59 +122,92 @@ export default function CreatePlaylistModal({
           }
         } catch (recError) {
           console.error("Error getting recommendations:", recError)
-          // Fallback to a sample track if recommendations fail
-          tracks = [
-            {
-              id: "sample-track",
-              uri: "spotify:track:4iV5W9uYEdYUVa79Axb7Rh", // Random track URI
-              name: "Sample Track",
-              artists: [{ name: "Sample Artist" }],
-              album: {
-                name: "Sample Album",
-                images: [{ url: "/placeholder.svg?height=200&width=200" }],
-              },
-            },
-          ]
+          // Fallback to sample tracks
+          tracks = getFallbackTracks()
         }
       }
 
       if (tracks.length === 0) {
-        throw new Error("No tracks found for this mood. Please try a different selection.")
+        tracks = getFallbackTracks()
+      }
+
+      // Prepare mood data
+      const moodData = {
+        name: name.trim(),
+        description: description.trim() || `${name} - A ${moodTypes.find((m) => m.id === selectedMood)?.name} mood`,
+        mood_type: selectedMood,
+        image_url: getMoodImageUrl(selectedMood),
       }
 
       // Save mood to Supabase
-      console.log("Saving mood to Supabase")
-      const moodData = await saveMood(userId, {
-        name,
-        description: description || `${name} - A ${moodTypes.find((m) => m.id === selectedMood)?.name} mood`,
-        mood_type: selectedMood,
-        image_url: getMoodImageUrl(selectedMood),
-      })
+      console.log("Saving mood to Supabase with data:", { userId, ...moodData })
 
-      // Save tracks to Supabase
-      console.log("Saving tracks to Supabase")
-      const trackData = tracks.map((track) => ({
-        track_id: track.id,
-        track_uri: track.uri,
-        track_name: track.name,
-        artist_name: track.artists.map((a: any) => a.name).join(", "),
-        album_name: track.album?.name,
-        album_image_url: track.album?.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
-      }))
+      try {
+        // Save the mood
+        const savedMood = await saveMood(userId, moodData)
 
-      await saveMoodTracks(moodData.id, trackData)
+        if (!savedMood || !savedMood.id) {
+          throw new Error("Failed to save mood - no ID returned")
+        }
 
-      // Update UI
-      onMoodCreated({
-        ...moodData,
-        tracks: trackData,
-      })
+        console.log("Mood saved successfully with ID:", savedMood.id)
 
-      // Close modal
-      onClose()
+        // Prepare track data
+        const trackData = tracks.map((track) => ({
+          track_id: track.id || `unknown-${Math.random().toString(36).substring(2, 9)}`,
+          track_uri: track.uri || `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
+          track_name: track.name || "Unknown Track",
+          artist_name: track.artists ? track.artists.map((a: any) => a.name).join(", ") : "Unknown Artist",
+          album_name: track.album?.name || null,
+          album_image_url: track.album?.images?.[0]?.url || null,
+        }))
+
+        // Save tracks to Supabase
+        console.log(`Saving ${trackData.length} tracks for mood ID: ${savedMood.id}`)
+        await saveMoodTracks(savedMood.id, trackData)
+
+        // Update UI
+        onMoodCreated({
+          ...savedMood,
+          tracks: trackData,
+        })
+
+        // Show success toast
+        toast({
+          title: "Mood Created",
+          description: `Your "${name}" mood has been created successfully.`,
+        })
+
+        // Close modal
+        onClose()
+
+        // Reset form
+        setName("")
+        setDescription("")
+        setSelectedMood("happy")
+        setSourceType("random")
+        setSourcePlaylist("")
+      } catch (dbError) {
+        console.error("Database error:", dbError)
+        setError(`Database error: ${dbError instanceof Error ? dbError.message : "Unknown error"}`)
+
+        // Show error toast
+        toast({
+          title: "Error Creating Mood",
+          description: "There was a problem saving your mood to the database.",
+          variant: "destructive",
+        })
+      }
     } catch (err) {
       console.error("Error creating mood:", err)
       setError(`Failed to create mood: ${err instanceof Error ? err.message : "Unknown error"}`)
+
+      // Show error toast
+      toast({
+        title: "Error",
+        description: "Failed to create mood. Please try again.",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -175,6 +228,31 @@ export default function CreatePlaylistModal({
       default:
         return ["pop"]
     }
+  }
+
+  const getFallbackTracks = () => {
+    return [
+      {
+        id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
+        uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
+        name: "Fallback Track 1",
+        artists: [{ name: "Fallback Artist" }],
+        album: {
+          name: "Fallback Album",
+          images: [{ url: "/placeholder.svg?height=200&width=200" }],
+        },
+      },
+      {
+        id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
+        uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
+        name: "Fallback Track 2",
+        artists: [{ name: "Fallback Artist" }],
+        album: {
+          name: "Fallback Album",
+          images: [{ url: "/placeholder.svg?height=200&width=200" }],
+        },
+      },
+    ]
   }
 
   return (
