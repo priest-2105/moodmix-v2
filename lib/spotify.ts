@@ -231,6 +231,8 @@ export async function getRecommendations(accessToken: string, params: any) {
       }
     })
 
+    console.log("Getting recommendations with params:", Object.fromEntries(queryParams.entries()))
+
     const response = await fetch(`https://api.spotify.com/v1/recommendations?${queryParams.toString()}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -238,10 +240,14 @@ export async function getRecommendations(accessToken: string, params: any) {
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Recommendations error response:", errorText)
       throw new Error(`Failed to get recommendations: ${response.status} ${response.statusText}`)
     }
 
-    return response.json()
+    const data = await response.json()
+    console.log("Recommendations success, count:", data.tracks?.length || 0)
+    return data
   } catch (error) {
     console.error("Error in getRecommendations:", error)
     throw error
