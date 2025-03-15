@@ -22,6 +22,22 @@ import { useNavigationHistory } from "@/hooks/use-navigation-history"
 import SearchBar from "@/components/search-bar"
 import SearchResults from "@/components/search-results"
 import { toast } from "@/components/ui/use-toast"
+import { getUserMoods } from "@/lib/supabase/moods"
+
+// Dummy data for mood types
+const moodTypes = [
+  { id: "happy", name: "Happy" },
+  { id: "sad", name: "Sad" },
+  { id: "energetic", name: "Energetic" },
+  { id: "relaxed", name: "Relaxed" },
+  // Add more mood types as needed
+]
+
+// Dummy function to get mood image URL
+const getMoodImageUrl = (moodType: string) => {
+  // Replace with your actual logic to fetch mood image URLs
+  return `/images/moods/${moodType}.svg`
+}
 
 export default function Home() {
   const searchParams = useSearchParams()
@@ -490,8 +506,39 @@ export default function Home() {
   // Function to handle sidebar moods click
   const handleSidebarMoodsClick = () => {
     setIsMoodsModalOpen(true)
-    // In a real app, you would load the user's mood playlists here
-    setMoods([])
+
+    // Load user moods from Supabase
+    const loadUserMoods = async () => {
+      if (!user?.id) return
+
+      setIsLoadingContent(true)
+      try {
+        const userMoods = await getUserMoods(user.id)
+
+        // Transform the data for the ContentModal
+        const moodItems = userMoods.map((mood) => ({
+          id: mood.id,
+          name: mood.name,
+          imageUrl: mood.image_url || getMoodImageUrl(mood.mood_type),
+          description: mood.description || `${moodTypes.find((m) => m.id === mood.mood_type)?.name || "Custom"} mood`,
+          type: "mood",
+        }))
+
+        setMoods(moodItems)
+      } catch (error) {
+        console.error("Error loading moods:", error)
+        toast({
+          title: "Error Loading Moods",
+          description: "We couldn't load your moods. Please try again.",
+          variant: "destructive",
+        })
+        setMoods([])
+      } finally {
+        setIsLoadingContent(false)
+      }
+    }
+
+    loadUserMoods()
   }
 
   // Function to handle sidebar artists click
@@ -756,9 +803,23 @@ export default function Home() {
         accessToken={accessToken}
         userId={user?.id}
         existingPlaylists={playlists}
-        onPlaylistCreated={(newPlaylist) => {
-          setPlaylists([newPlaylist, ...playlists])
-          setSelectedPlaylist(newPlaylist)
+        onMoodCreated={(newMood) => {
+          // Add the new mood to the moods array
+          setMoods((prevMoods) => [
+            {
+              id: newMood.id,
+              name: newMood.name,
+              imageUrl: newMood.image_url,
+              description: newMood.description,
+              type: "mood",
+            },
+            ...prevMoods,
+          ])
+
+          toast({
+            title: "Mood Created",
+            description: `Your "${newMood.name}" mood has been created successfully.`,
+          })
         }}
       />
 

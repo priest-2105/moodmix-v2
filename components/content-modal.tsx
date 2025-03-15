@@ -48,7 +48,7 @@ export default function ContentModal({
 
         <div className="flex justify-between items-center mb-4">
           <p className="text-gray-400">
-            {type === "moods" && "Create and browse your mood-based playlists"}
+            {type === "moods" && "Create and browse your mood-based collections"}
             {type === "artists" && "Artists you've recently listened to"}
             {type === "albums" && "Albums you've recently played"}
             {type === "podcasts" && "Podcasts you might enjoy"}
@@ -106,7 +106,7 @@ export default function ContentModal({
               </div>
               <h3 className="text-xl font-bold mb-2">No {type} found</h3>
               <p className="text-gray-400 text-center max-w-md mb-6">
-                {type === "moods" && "Create your first mood-based playlist to get started"}
+                {type === "moods" && "Create your first mood-based collection to get started"}
                 {type === "artists" && "Listen to some music to see your recent artists"}
                 {type === "albums" && "Listen to some albums to see them here"}
                 {type === "podcasts" && "Explore podcasts to see them here"}
