@@ -248,3 +248,22 @@ export async function getRecommendations(accessToken: string, params: any) {
   }
 }
 
+export async function getRecentlyPlayedTracks(accessToken: string) {
+  try {
+    const response = await fetch("https://api.spotify.com/v1/me/player/recently-played?limit=50", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to get recently played tracks: ${response.status} ${response.statusText}`)
+    }
+
+    return response.json()
+  } catch (error) {
+    console.error("Error in getRecentlyPlayedTracks:", error)
+    throw error
+  }
+}
+
