@@ -3,15 +3,30 @@
 import { useState } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { Home, Search, Music2, Radio, User2 } from "lucide-react"
+import { Home, Search, Music2, Radio, User2, Disc3 } from "lucide-react"
 import type { Playlist } from "@/types/spotify"
 
 interface SidebarProps {
   playlists?: Playlist[]
   onPlaylistSelect?: (playlist: Playlist) => void
+  onMoodsClick?: () => void
+  onSearchClick?: () => void
+  onArtistsClick?: () => void
+  onAlbumsClick?: () => void
+  onRadioClick?: () => void
+  isLoadingPlaylists?: boolean
 }
 
-export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarProps) {
+export default function Sidebar({
+  playlists = [],
+  onPlaylistSelect,
+  onMoodsClick,
+  onSearchClick,
+  onArtistsClick,
+  onAlbumsClick,
+  onRadioClick,
+  isLoadingPlaylists = false,
+}: SidebarProps) {
   const [showAllPlaylists, setShowAllPlaylists] = useState(false)
   const displayedPlaylists = showAllPlaylists ? playlists : playlists.slice(0, 5)
 
@@ -38,11 +53,21 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
             <Home className="mr-3 h-5 w-5 text-[#00FFFF]" />
             Home
           </Button>
-          <Button variant="ghost" size="lg" className="w-full justify-start text-white hover:bg-white/10">
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full justify-start text-white hover:bg-white/10"
+            onClick={onSearchClick}
+          >
             <Search className="mr-3 h-5 w-5" />
             Search
           </Button>
-          <Button variant="ghost" size="lg" className="w-full justify-start text-white hover:bg-white/10">
+          <Button
+            variant="ghost"
+            size="lg"
+            className="w-full justify-start text-white hover:bg-white/10"
+            onClick={onMoodsClick}
+          >
             <Radio className="mr-3 h-5 w-5" />
             Your Moods
           </Button>
@@ -63,27 +88,39 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
             </div>
             <ScrollArea className="h-[300px] pr-4">
               <div className="space-y-1">
-                {displayedPlaylists.map((playlist) => (
-                  <Button
-                    key={playlist.id}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full justify-start font-normal text-white/70 hover:text-white hover:bg-white/10"
-                    onClick={() => handlePlaylistClick(playlist)}
-                  >
-                    <div className="flex items-center w-full overflow-hidden">
-                      {playlist.images && playlist.images[0] && (
-                        <img
-                          src={playlist.images[0].url || "/placeholder.svg"}
-                          alt={playlist.name}
-                          className="h-8 w-8 rounded mr-2 flex-shrink-0"
-                        />
-                      )}
-                      <span className="truncate">{playlist.name}</span>
-                    </div>
-                  </Button>
-                ))}
-                {playlists.length === 0 && <div className="text-sm text-gray-400 py-2">No playlists found</div>}
+                {isLoadingPlaylists ? (
+                  <div className="py-4 flex flex-col gap-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className="flex items-center gap-2 animate-pulse">
+                        <div className="h-8 w-8 rounded bg-white/10"></div>
+                        <div className="h-4 w-32 bg-white/10 rounded"></div>
+                      </div>
+                    ))}
+                  </div>
+                ) : displayedPlaylists.length > 0 ? (
+                  displayedPlaylists.map((playlist) => (
+                    <Button
+                      key={playlist.id}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start font-normal text-white/70 hover:text-white hover:bg-white/10"
+                      onClick={() => handlePlaylistClick(playlist)}
+                    >
+                      <div className="flex items-center w-full overflow-hidden">
+                        {playlist.images && playlist.images[0] && (
+                          <img
+                            src={playlist.images[0].url || "/placeholder.svg"}
+                            alt={playlist.name}
+                            className="h-8 w-8 rounded mr-2 flex-shrink-0"
+                          />
+                        )}
+                        <span className="truncate">{playlist.name}</span>
+                      </div>
+                    </Button>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-400 py-2">No playlists found</div>
+                )}
               </div>
             </ScrollArea>
           </div>
@@ -95,6 +132,7 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={onRadioClick}
               >
                 <Radio className="mr-3 h-4 w-4" />
                 Radio
@@ -103,6 +141,7 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={onArtistsClick}
               >
                 <User2 className="mr-3 h-4 w-4" />
                 Artists
@@ -111,8 +150,9 @@ export default function Sidebar({ playlists = [], onPlaylistSelect }: SidebarPro
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
+                onClick={onAlbumsClick}
               >
-                <Music2 className="mr-3 h-4 w-4" />
+                <Disc3 className="mr-3 h-4 w-4" />
                 Albums
               </Button>
             </div>

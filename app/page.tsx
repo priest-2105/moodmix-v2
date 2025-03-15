@@ -58,6 +58,9 @@ export default function Home() {
   ])
   const navigation = useNavigationHistory({ type: "home" })
 
+  // Add a state for player state
+  const [playerState, setPlayerState] = useState<any>(null)
+
   // Handle authentication flow
   useEffect(() => {
     const handleAuth = async () => {
@@ -68,32 +71,74 @@ export default function Home() {
           if (tokenResponse.access_token) {
             setAccessToken(tokenResponse.access_token)
             localStorage.setItem("spotify_access_token", tokenResponse.access_token)
-            localStorage.setItem("spotify_refresh_token", tokenResponse.refresh_token)
+            localStorage.setItem("spotify_refresh_token", tokenResponse.refresh_token || "")
             localStorage.setItem("spotify_token_expiry", (Date.now() + tokenResponse.expires_in * 1000).toString())
             setIsAuthenticated(true)
             setIsLoginModalOpen(false)
 
             // Get user profile
-            const userProfile = await getUserProfile(tokenResponse.access_token)
-            setUser(userProfile)
+            try {
+              const userProfile = await getUserProfile(tokenResponse.access_token)
+              setUser(userProfile)
 
-            // Save user to Supabase
-            const supabase = createClient()
-            await saveUserPreferences(supabase, userProfile.id, {
-              last_login: new Date().toISOString(),
-              display_name: userProfile.display_name,
-              email: userProfile.email,
-            })
+              // Save minimal user data to Supabase
+              try {
+                const supabase = createClient()
+                // Only store non-sensitive information
+                await saveUserPreferences(supabase, userProfile.id, {
+                  last_login: new Date().toISOString(),
+                  display_name: userProfile.display_name,
+                  email: userProfile.email,
+                  // We don't store tokens or passwords
+                })
+                console.log("Saved basic user profile to Supabase")
+              } catch (supabaseError) {
+                console.error("Supabase error:", supabaseError)
+                // Continue even if Supabase fails - this is optional functionality
+              }
 
-            // Load user playlists
-            const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
-            setPlaylists(userPlaylists)
+              // Load user playlists
+              try {
+                const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
+                setPlaylists(userPlaylists)
+              } catch (playlistsError) {
+                console.error("Error loading playlists:", playlistsError)
+                toast({
+                  title: "Error loading playlists",
+                  description: "We couldn't load your playlists. Some features may be limited.",
+                  variant: "destructive",
+                })
+              }
+            } catch (profileError) {
+              console.error("Error loading user profile:", profileError)
+              toast({
+                title: "Authentication Error",
+                description: "We couldn't load your profile. Please try logging in again.",
+                variant: "destructive",
+              })
+              // Reset auth state
+              localStorage.removeItem("spotify_access_token")
+              localStorage.removeItem("spotify_refresh_token")
+              localStorage.removeItem("spotify_token_expiry")
+              setIsAuthenticated(false)
+              setAccessToken(null)
+              setIsLoginModalOpen(true)
+            }
           }
         } catch (error) {
           console.error("Authentication error:", error)
+          toast({
+            title: "Authentication Failed",
+            description: error instanceof Error ? error.message : "An unknown error occurred",
+            variant: "destructive",
+          })
+          setIsLoginModalOpen(true)
         } finally {
           setIsLoading(false)
-          window.history.replaceState({}, document.title, window.location.pathname)
+          // Don't modify history if we're on the callback page
+          if (window.location.pathname !== "/callback") {
+            window.history.replaceState({}, document.title, window.location.pathname)
+          }
         }
       }
     }
@@ -209,6 +254,11 @@ export default function Home() {
     }
   }
 
+  // Add a function to handle player state changes
+  const handlePlayerStateChange = useCallback((state: any) => {
+    setPlayerState(state)
+  }, [])
+
   return (
     <div className="h-screen bg-[#1a1a1a] text-white overflow-hidden">
       <div className={`flex h-full ${isLoginModalOpen ? "blur-sm" : ""}`}>
@@ -317,7 +367,12 @@ export default function Home() {
                     selectedPlaylistId={selectedPlaylist?.id}
                   />
                 ) : showPlaylistView && selectedPlaylist ? (
-                  <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                  <PlaylistView
+                    playlist={selectedPlaylist}
+                    accessToken={accessToken}
+                    onTrackPlay={handleTrackPlay}
+                    onPlayerStateChange={handlePlayerStateChange} // Add this prop
+                  />
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="space-y-8 p-6">
