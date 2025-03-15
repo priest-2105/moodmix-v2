@@ -9,10 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
 import { Loader2 } from "lucide-react"
-import { createPlaylist, addTracksToPlaylist, getRecommendations } from "@/lib/spotify"
-import { createClient } from "@/lib/supabase/client"
-import { savePlaylistPreference } from "@/lib/supabase/playlist"
+import { getRecommendations, getPlaylistTracks } from "@/lib/spotify"
+import { saveMood, saveMoodTracks } from "@/lib/supabase/moods"
 import type { Playlist } from "@/types/spotify"
 
 interface CreatePlaylistModalProps {
@@ -21,16 +21,26 @@ interface CreatePlaylistModalProps {
   accessToken: string | null
   userId: string | undefined
   existingPlaylists: Playlist[]
-  onPlaylistCreated: (playlist: Playlist) => void
+  onMoodCreated: (mood: any) => void
 }
 
-const moods = [
-  { id: "happy", name: "Happy", params: { min_valence: 0.7, target_energy: 0.8 } },
-  { id: "sad", name: "Sad", params: { max_valence: 0.3, target_energy: 0.4 } },
-  { id: "energetic", name: "Energetic", params: { min_energy: 0.8, target_tempo: 150 } },
-  { id: "relaxed", name: "Relaxed", params: { max_energy: 0.4, target_acousticness: 0.8 } },
-  { id: "focused", name: "Focused", params: { target_instrumentalness: 0.5, max_speechiness: 0.3 } },
+const moodTypes = [
+  { id: "happy", name: "Happy", params: { min_valence: 0.7, target_energy: 0.8 }, color: "#FFD700" },
+  { id: "sad", name: "Sad", params: { max_valence: 0.3, target_energy: 0.4 }, color: "#6495ED" },
+  { id: "energetic", name: "Energetic", params: { min_energy: 0.8, target_tempo: 150 }, color: "#FF4500" },
+  { id: "relaxed", name: "Relaxed", params: { max_energy: 0.4, target_acousticness: 0.8 }, color: "#98FB98" },
+  { id: "focused", name: "Focused", params: { target_instrumentalness: 0.5, max_speechiness: 0.3 }, color: "#9370DB" },
 ]
+
+// Generate mood images based on type
+const getMoodImageUrl = (moodType: string) => {
+  const mood = moodTypes.find((m) => m.id === moodType)
+  if (!mood) return "/placeholder.svg?height=400&width=400"
+
+  // In a real app, you'd have actual images for each mood
+  // For now, we'll use a colored placeholder
+  return `/placeholder.svg?height=400&width=400&text=${mood.name}&bgcolor=${mood.color.substring(1)}`
+}
 
 export default function CreatePlaylistModal({
   isOpen,
@@ -38,9 +48,10 @@ export default function CreatePlaylistModal({
   accessToken,
   userId,
   existingPlaylists,
-  onPlaylistCreated,
+  onMoodCreated,
 }: CreatePlaylistModalProps) {
   const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
   const [selectedMood, setSelectedMood] = useState("happy")
   const [sourceType, setSourceType] = useState("random")
   const [sourcePlaylist, setSourcePlaylist] = useState("")
@@ -51,12 +62,12 @@ export default function CreatePlaylistModal({
     e.preventDefault()
 
     if (!accessToken || !userId) {
-      setError("You must be logged in to create a playlist")
+      setError("You must be logged in to create a mood")
       return
     }
 
     if (!name.trim()) {
-      setError("Please enter a playlist name")
+      setError("Please enter a mood name")
       return
     }
 
@@ -64,62 +75,86 @@ export default function CreatePlaylistModal({
     setError("")
 
     try {
-      // Create empty playlist
-      const newPlaylist = await createPlaylist(accessToken, userId, {
-        name,
-        description: `${name} - A ${moods.find((m) => m.id === selectedMood)?.name} mood playlist`,
-      })
-
       // Get tracks based on mood
-      const selectedMoodParams = moods.find((m) => m.id === selectedMood)?.params || {}
-
-      let trackUris: string[] = []
+      const selectedMoodParams = moodTypes.find((m) => m.id === selectedMood)?.params || {}
+      let tracks: any[] = []
 
       if (sourceType === "existing" && sourcePlaylist) {
-        // Get tracks from existing playlist and filter by mood
-        // In a real app, you'd analyze the audio features of these tracks
-        // and filter based on the mood parameters
-        // For simplicity, we'll just use the first 10 tracks
-        const selectedPlaylistObj = existingPlaylists.find((p) => p.id === sourcePlaylist)
-        if (selectedPlaylistObj && selectedPlaylistObj.tracks && selectedPlaylistObj.tracks.items) {
-          trackUris = selectedPlaylistObj.tracks.items.slice(0, 10).map((item) => item.track.uri)
+        // Get tracks from existing playlist
+        console.log("Getting tracks from existing playlist:", sourcePlaylist)
+        const playlistTracks = await getPlaylistTracks(accessToken, sourcePlaylist)
+
+        if (playlistTracks && playlistTracks.items) {
+          tracks = playlistTracks.items.map((item: any) => item.track).slice(0, 20)
         }
       } else {
         // Get recommendations based on mood
-        const recommendations = await getRecommendations(accessToken, {
-          seed_genres: getMoodGenres(selectedMood),
-          limit: 20,
-          ...selectedMoodParams,
-        })
+        try {
+          console.log("Getting recommendations for mood:", selectedMood)
+          const recommendations = await getRecommendations(accessToken, {
+            seed_genres: getMoodGenres(selectedMood),
+            limit: 20,
+            ...selectedMoodParams,
+          })
 
-        trackUris = recommendations.tracks.map((track) => track.uri)
+          if (recommendations && recommendations.tracks) {
+            tracks = recommendations.tracks
+          }
+        } catch (recError) {
+          console.error("Error getting recommendations:", recError)
+          // Fallback to a sample track if recommendations fail
+          tracks = [
+            {
+              id: "sample-track",
+              uri: "spotify:track:4iV5W9uYEdYUVa79Axb7Rh", // Random track URI
+              name: "Sample Track",
+              artists: [{ name: "Sample Artist" }],
+              album: {
+                name: "Sample Album",
+                images: [{ url: "/placeholder.svg?height=200&width=200" }],
+              },
+            },
+          ]
+        }
       }
 
-      // Add tracks to playlist
-      if (trackUris.length > 0) {
-        await addTracksToPlaylist(accessToken, newPlaylist.id, trackUris)
+      if (tracks.length === 0) {
+        throw new Error("No tracks found for this mood. Please try a different selection.")
       }
 
-      // Save playlist preference to Supabase
-      const supabase = createClient()
-      await savePlaylistPreference(supabase, userId, {
-        playlist_id: newPlaylist.id,
-        playlist_name: name,
-        mood: selectedMood,
-        created_at: new Date().toISOString(),
+      // Save mood to Supabase
+      console.log("Saving mood to Supabase")
+      const moodData = await saveMood(userId, {
+        name,
+        description: description || `${name} - A ${moodTypes.find((m) => m.id === selectedMood)?.name} mood`,
+        mood_type: selectedMood,
+        image_url: getMoodImageUrl(selectedMood),
       })
 
+      // Save tracks to Supabase
+      console.log("Saving tracks to Supabase")
+      const trackData = tracks.map((track) => ({
+        track_id: track.id,
+        track_uri: track.uri,
+        track_name: track.name,
+        artist_name: track.artists.map((a: any) => a.name).join(", "),
+        album_name: track.album?.name,
+        album_image_url: track.album?.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+      }))
+
+      await saveMoodTracks(moodData.id, trackData)
+
       // Update UI
-      onPlaylistCreated({
-        ...newPlaylist,
-        tracks: { items: [] }, // Initialize with empty tracks
+      onMoodCreated({
+        ...moodData,
+        tracks: trackData,
       })
 
       // Close modal
       onClose()
     } catch (err) {
-      console.error("Error creating playlist:", err)
-      setError("Failed to create playlist. Please try again.")
+      console.error("Error creating mood:", err)
+      setError(`Failed to create mood: ${err instanceof Error ? err.message : "Unknown error"}`)
     } finally {
       setIsLoading(false)
     }
@@ -146,28 +181,40 @@ export default function CreatePlaylistModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Mood Playlist</DialogTitle>
+          <DialogTitle>Create Mood Collection</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Playlist Name</Label>
+            <Label htmlFor="name">Mood Name</Label>
             <Input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My Awesome Playlist"
+              placeholder="My Chill Vibes"
               required
             />
           </div>
 
           <div className="space-y-2">
-            <Label>Select Mood</Label>
+            <Label htmlFor="description">Description (Optional)</Label>
+            <Textarea
+              id="description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="A collection of songs for relaxing..."
+              className="resize-none"
+              rows={2}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Select Mood Type</Label>
             <Select value={selectedMood} onValueChange={setSelectedMood}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a mood" />
               </SelectTrigger>
               <SelectContent>
-                {moods.map((mood) => (
+                {moodTypes.map((mood) => (
                   <SelectItem key={mood.id} value={mood.id}>
                     {mood.name}
                   </SelectItem>
@@ -181,7 +228,7 @@ export default function CreatePlaylistModal({
             <RadioGroup value={sourceType} onValueChange={setSourceType}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="random" id="random" />
-                <Label htmlFor="random">Generate random songs based on mood</Label>
+                <Label htmlFor="random">Generate songs based on mood</Label>
               </div>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="existing" id="existing" />
@@ -225,7 +272,7 @@ export default function CreatePlaylistModal({
                   Creating...
                 </>
               ) : (
-                "Create Playlist"
+                "Create Mood"
               )}
             </Button>
           </div>
