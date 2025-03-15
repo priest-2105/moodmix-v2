@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, Loader2, Play } from "lucide-react"
 import { getSpotifyToken, getUserProfile, getUserPlaylists, getRecentlyPlayedTracks } from "@/lib/spotify"
 import { Toaster } from "@/components/ui/toaster"
 import LoginModal from "@/components/login-modal"
@@ -13,6 +13,7 @@ import PlaylistCard from "@/components/playlist-card"
 import MusicPlayer from "@/components/music-player"
 import Sidebar from "@/components/sidebar"
 import PlaylistView from "@/components/playlist-view"
+import MoodView from "@/components/mood-view"
 import UserProfileButton from "@/components/user-profile-button"
 import ContentModal from "@/components/content-modal"
 import type { Playlist, SpotifyUser } from "@/types/spotify"
@@ -53,9 +54,11 @@ export default function Home() {
   const [user, setUser] = useState<SpotifyUser | null>(null)
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null)
+  const [selectedMood, setSelectedMood] = useState<any | null>(null)
   const [currentlyPlaying, setCurrentlyPlaying] = useState<any>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showPlaylistView, setShowPlaylistView] = useState(false)
+  const [showMoodView, setShowMoodView] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
 
@@ -114,12 +117,7 @@ export default function Home() {
             setUser(userProfile)
 
             // Check if the user ID is a valid UUID before saving to Supabase
-            const isValidUUID = (uuid) => {
-              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-              return uuidRegex.test(uuid)
-            }
-
-            if (userProfile && userProfile.id && isValidUUID(userProfile.id)) {
+            if (userProfile && userProfile.id) {
               // Save minimal user data to Supabase
               try {
                 const supabase = createClient()
@@ -135,13 +133,6 @@ export default function Home() {
                 console.error("Supabase error:", supabaseError)
                 // Continue even if Supabase fails - this is optional functionality
               }
-            } else {
-              console.error("Invalid user ID format from Spotify:", userProfile?.id)
-              toast({
-                title: "Warning",
-                description: "Your user ID format is not compatible with our database. Some features may be limited.",
-                variant: "destructive",
-              })
             }
 
             // Load user playlists
@@ -225,26 +216,29 @@ export default function Home() {
 
   const handlePlaylistSelect = (playlist: Playlist) => {
     setSelectedPlaylist(playlist)
+    setSelectedMood(null)
     setShowPlaylistView(true)
+    setShowMoodView(false)
     setIsSearching(false)
     navigation.navigate({ type: "playlist", id: playlist.id, data: playlist })
     // Scroll to top when selecting a playlist
     window.scrollTo(0, 0)
   }
 
-  const handleMoodSelect = (mood: string) => {
-    // In a real app, you would filter playlists by mood
-    // For now, we'll just show a toast notification
-    toast({
-      title: `${mood} Mood Selected`,
-      description: `Showing playlists with ${mood.toLowerCase()} mood`,
-    })
-    navigation.navigate({ type: "mood", id: mood })
+  const handleMoodSelect = (mood: any) => {
+    setSelectedMood(mood)
+    setSelectedPlaylist(null)
+    setShowMoodView(true)
+    setShowPlaylistView(false)
     setIsSearching(false)
+    navigation.navigate({ type: "mood", id: mood.id, data: mood })
+    // Scroll to top when selecting a mood
+    window.scrollTo(0, 0)
   }
 
   const handleBackToHome = () => {
     setShowPlaylistView(false)
+    setShowMoodView(false)
     setIsSearching(false)
     navigation.navigate({ type: "home" })
   }
@@ -279,9 +273,11 @@ export default function Home() {
     setUser(null)
     setPlaylists([])
     setSelectedPlaylist(null)
+    setSelectedMood(null)
     setCurrentlyPlaying(null)
     setIsPlaying(false)
     setShowPlaylistView(false)
+    setShowMoodView(false)
     setIsLoginModalOpen(true)
   }
 
@@ -521,6 +517,8 @@ export default function Home() {
           imageUrl: mood.image_url || getMoodImageUrl(mood.mood_type),
           description: mood.description || `${moodTypes.find((m) => m.id === mood.mood_type)?.name || "Custom"} mood`,
           type: "mood",
+          mood_type: mood.mood_type,
+          created_at: mood.created_at,
         }))
 
         setMoods(moodItems)
@@ -584,14 +582,24 @@ export default function Home() {
                     const prevState = navigation.back()
                     if (prevState.type === "home") {
                       setShowPlaylistView(false)
+                      setShowMoodView(false)
                       setIsSearching(false)
                     } else if (prevState.type === "playlist" && prevState.data) {
                       setSelectedPlaylist(prevState.data)
+                      setSelectedMood(null)
                       setShowPlaylistView(true)
+                      setShowMoodView(false)
+                      setIsSearching(false)
+                    } else if (prevState.type === "mood" && prevState.data) {
+                      setSelectedMood(prevState.data)
+                      setSelectedPlaylist(null)
+                      setShowMoodView(true)
+                      setShowPlaylistView(false)
                       setIsSearching(false)
                     } else if (prevState.type === "search") {
                       setIsSearching(true)
                       setShowPlaylistView(false)
+                      setShowMoodView(false)
                       setSearchQuery(prevState.id || "")
                     }
                   }}
@@ -607,14 +615,24 @@ export default function Home() {
                     const nextState = navigation.forward()
                     if (nextState.type === "home") {
                       setShowPlaylistView(false)
+                      setShowMoodView(false)
                       setIsSearching(false)
                     } else if (nextState.type === "playlist" && nextState.data) {
                       setSelectedPlaylist(nextState.data)
+                      setSelectedMood(null)
                       setShowPlaylistView(true)
+                      setShowMoodView(false)
+                      setIsSearching(false)
+                    } else if (nextState.type === "mood" && nextState.data) {
+                      setSelectedMood(nextState.data)
+                      setSelectedPlaylist(null)
+                      setShowMoodView(true)
+                      setShowPlaylistView(false)
                       setIsSearching(false)
                     } else if (nextState.type === "search") {
                       setIsSearching(true)
                       setShowPlaylistView(false)
+                      setShowMoodView(false)
                       setSearchQuery(nextState.id || "")
                     }
                   }}
@@ -631,6 +649,8 @@ export default function Home() {
                         setSearchQuery(query)
                         if (query) {
                           setIsSearching(true)
+                          setShowPlaylistView(false)
+                          setShowMoodView(false)
                           if (navigation.current.type !== "search" || navigation.current.id !== query) {
                             navigation.navigate({ type: "search", id: query })
                           }
@@ -652,7 +672,7 @@ export default function Home() {
                     onClick={() => setIsCreatePlaylistModalOpen(true)}
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Create Playlist
+                    Create Mood
                   </Button>
 
                   <UserProfileButton user={user} onLogout={handleLogout} />
@@ -672,16 +692,22 @@ export default function Home() {
                     playlists={playlists}
                     moods={availableMoods}
                     onPlaylistSelect={handlePlaylistSelect}
-                    onMoodSelect={handleMoodSelect}
+                    onMoodSelect={(moodName) => {
+                      // Find the mood by name or create a placeholder
+                      const mood = moods.find((m) => m.name.toLowerCase() === moodName.toLowerCase()) || {
+                        id: `temp-${Date.now()}`,
+                        name: moodName,
+                        mood_type: moodName.toLowerCase(),
+                        description: `${moodName} mood`,
+                      }
+                      handleMoodSelect(mood)
+                    }}
                     selectedPlaylistId={selectedPlaylist?.id}
                   />
                 ) : showPlaylistView && selectedPlaylist ? (
-                  <PlaylistView
-                    playlist={selectedPlaylist}
-                    accessToken={accessToken}
-                    onTrackPlay={handleTrackPlay}
-                    onPlayerStateChange={handlePlayerStateChange}
-                  />
+                  <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                ) : showMoodView && selectedMood ? (
+                  <MoodView mood={selectedMood} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : isLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="flex flex-col items-center">
@@ -716,6 +742,55 @@ export default function Home() {
                           ))}
                         </div>
                       </section>
+
+                      {moods.length > 0 && (
+                        <section>
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-2xl font-bold">Your Moods</h2>
+                            <Button
+                              variant="ghost"
+                              className="text-white/70 hover:text-white"
+                              onClick={handleSidebarMoodsClick}
+                            >
+                              See All
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {moods.slice(0, 4).map((mood) => (
+                              <div
+                                key={mood.id}
+                                className="group relative aspect-square overflow-hidden rounded-md cursor-pointer transition-all hover:scale-[1.02]"
+                                onClick={() => handleMoodSelect(mood)}
+                              >
+                                <img
+                                  src={mood.imageUrl || `/placeholder.svg?height=400&width=400&text=${mood.name}`}
+                                  alt={mood.name}
+                                  className="object-cover w-full h-full"
+                                />
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                <div className="absolute bottom-0 left-0 right-0 p-4">
+                                  <span className="inline-block px-2 py-1 mb-2 text-xs font-medium bg-[#00FFFF] text-black rounded">
+                                    {mood.mood_type?.toUpperCase() || "MOOD"}
+                                  </span>
+                                  <h3 className="text-lg font-bold text-white line-clamp-1">{mood.name}</h3>
+                                  <p className="text-sm text-white/70 line-clamp-2">
+                                    {mood.description || `A ${mood.mood_type} mood collection`}
+                                  </p>
+                                </div>
+                                <button
+                                  className="absolute right-4 bottom-4 h-10 w-10 rounded-full bg-[#00FFFF] text-black opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleMoodSelect(mood)
+                                  }}
+                                >
+                                  <Play className="h-5 w-5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
 
                       <section>
                         <div className="flex items-center justify-between mb-4">
@@ -781,7 +856,7 @@ export default function Home() {
           }`}
         >
           <MusicPlayer
-            playlistId={selectedPlaylist?.id || ""}
+            playlistId={selectedPlaylist?.id || selectedMood?.id || ""}
             accessToken={accessToken}
             onTrackPlay={handleTrackPlay}
             currentTrack={currentlyPlaying}
@@ -811,6 +886,8 @@ export default function Home() {
               imageUrl: newMood.image_url,
               description: newMood.description,
               type: "mood",
+              mood_type: newMood.mood_type,
+              created_at: newMood.created_at,
             },
             ...prevMoods,
           ])
@@ -833,7 +910,7 @@ export default function Home() {
         onItemClick={(item) => {
           // Handle mood click
           setIsMoodsModalOpen(false)
-          handleMoodSelect(item.name)
+          handleMoodSelect(item)
         }}
         onCreateClick={() => {
           setIsMoodsModalOpen(false)

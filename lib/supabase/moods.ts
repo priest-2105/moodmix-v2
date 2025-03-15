@@ -7,7 +7,7 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string
 
 export interface MoodData {
   id?: string
-  user_id: string // This should be a valid UUID that exists in auth.users
+  user_id: string
   name: string
   description?: string | null
   mood_type: string
@@ -17,7 +17,7 @@ export interface MoodData {
 
 export interface MoodTrack {
   id?: string
-  mood_id: string // This should be a valid UUID that references moods.id
+  mood_id: string
   track_id: string
   track_uri: string
   track_name: string
@@ -36,15 +36,9 @@ function isValidUUID(uuid: string): boolean {
 export async function saveMood(userId: string, moodData: Omit<MoodData, "user_id">) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  // Validate userId is a valid UUID
-  if (!isValidUUID(userId)) {
-    console.error("Invalid user ID format. Expected UUID, got:", userId)
-    throw new Error("Invalid user ID format. Must be a valid UUID.")
-  }
-
   // Log the exact data we're sending to Supabase
   const moodToInsert = {
-    user_id: userId,
+    user_id: userId, // Use Spotify ID directly
     name: moodData.name,
     description: moodData.description || null,
     mood_type: moodData.mood_type || "custom",
@@ -132,11 +126,7 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
 export async function getUserMoods(userId: string) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  // Validate userId is a valid UUID
-  if (!isValidUUID(userId)) {
-    console.error("Invalid user ID format in getUserMoods. Expected UUID, got:", userId)
-    return []
-  }
+  console.log(`Getting moods for Spotify ID ${userId}`)
 
   try {
     const { data, error } = await supabase

@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload } from "lucide-react"
 import { getRecommendations, getPlaylistTracks } from "@/lib/spotify"
 import { saveMood, saveMoodTracks } from "@/lib/supabase/moods"
 import type { Playlist } from "@/types/spotify"
@@ -42,12 +42,6 @@ const getMoodImageUrl = (moodType: string) => {
   return `/placeholder.svg?height=400&width=400&text=${mood.name}&bgcolor=${mood.color.substring(1)}`
 }
 
-// Helper function to validate UUID format
-function isValidUUID(uuid: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  return uuidRegex.test(uuid)
-}
-
 export default function CreatePlaylistModal({
   isOpen,
   onClose,
@@ -63,20 +57,29 @@ export default function CreatePlaylistModal({
   const [sourcePlaylist, setSourcePlaylist] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [customImage, setCustomImage] = useState<string | null>(null)
+  const [useCustomImage, setUseCustomImage] = useState(false)
   const { toast } = useToast()
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // For simplicity, we'll use a data URL
+      // In a production app, you'd upload this to a storage service
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        setCustomImage(event.target?.result as string)
+        setUseCustomImage(true)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!userId) {
       setError("You must be logged in to create a mood")
-      return
-    }
-
-    // Validate userId is a valid UUID
-    if (!isValidUUID(userId)) {
-      console.error("Invalid user ID format:", userId)
-      setError("Invalid user ID format. Please log out and log in again.")
       return
     }
 
@@ -131,12 +134,15 @@ export default function CreatePlaylistModal({
         tracks = getFallbackTracks()
       }
 
+      // Determine image URL
+      const imageUrl = useCustomImage && customImage ? customImage : getMoodImageUrl(selectedMood)
+
       // Prepare mood data
       const moodData = {
         name: name.trim(),
         description: description.trim() || `${name} - A ${moodTypes.find((m) => m.id === selectedMood)?.name} mood`,
         mood_type: selectedMood,
-        image_url: getMoodImageUrl(selectedMood),
+        image_url: imageUrl,
       }
 
       // Save mood to Supabase
@@ -187,6 +193,8 @@ export default function CreatePlaylistModal({
         setSelectedMood("happy")
         setSourceType("random")
         setSourcePlaylist("")
+        setCustomImage(null)
+        setUseCustomImage(false)
       } catch (dbError) {
         console.error("Database error:", dbError)
         setError(`Database error: ${dbError instanceof Error ? dbError.message : "Unknown error"}`)
@@ -299,6 +307,48 @@ export default function CreatePlaylistModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Mood Image</Label>
+            <div className="flex items-center gap-4">
+              <div className="relative w-24 h-24 rounded overflow-hidden border border-white/20">
+                <img
+                  src={useCustomImage && customImage ? customImage : getMoodImageUrl(selectedMood)}
+                  alt="Mood cover"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="flex-1">
+                <Label htmlFor="image-upload" className="cursor-pointer">
+                  <div className="flex items-center gap-2 p-2 border border-dashed border-white/30 rounded hover:bg-white/5 transition-colors">
+                    <Upload className="h-4 w-4" />
+                    <span>Upload custom image</span>
+                  </div>
+                  <input
+                    id="image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                </Label>
+                {customImage && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-xs text-red-400 hover:text-red-300"
+                    onClick={() => {
+                      setCustomImage(null)
+                      setUseCustomImage(false)
+                    }}
+                  >
+                    Remove custom image
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="space-y-2">
