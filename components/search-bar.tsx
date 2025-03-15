@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, forwardRef } from "react"
+import { useState, useEffect, forwardRef } from "react"
 import { SearchIcon, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -15,23 +15,7 @@ interface SearchBarProps {
 const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
   ({ onSearch, placeholder = "Search...", className = "" }, ref) => {
     const [query, setQuery] = useState("")
-    const inputRef = useRef<HTMLInputElement>(null)
     const debouncedQuery = useDebounce(query, 300)
-
-    // Combine the forwarded ref with our local ref
-    const combinedRef = (node: HTMLInputElement) => {
-      // Update the local ref
-      if (inputRef.current) {
-        inputRef.current = node
-      }
-
-      // Update the forwarded ref
-      if (typeof ref === "function") {
-        ref(node)
-      } else if (ref) {
-        ref.current = node
-      }
-    }
 
     useEffect(() => {
       onSearch(debouncedQuery)
@@ -40,14 +24,16 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
     const handleClear = () => {
       setQuery("")
       onSearch("")
-      inputRef.current?.focus()
+      if (ref && typeof ref !== "function" && ref.current) {
+        ref.current.focus()
+      }
     }
 
     return (
       <div className={`relative ${className}`}>
         <SearchIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/50" />
         <Input
-          ref={combinedRef}
+          ref={ref}
           type="text"
           placeholder={placeholder}
           value={query}

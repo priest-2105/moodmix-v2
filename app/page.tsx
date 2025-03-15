@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, ChevronLeft, ChevronRight } from "lucide-react"
-import { getSpotifyToken, getUserProfile, getUserPlaylists } from "@/lib/spotify"
+import { Plus, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
+import { getSpotifyToken, getUserProfile, getUserPlaylists, getRecentlyPlayedTracks } from "@/lib/spotify"
 import { Toaster } from "@/components/ui/toaster"
 import LoginModal from "@/components/login-modal"
 import CreatePlaylistModal from "@/components/create-playlist-modal"
@@ -14,6 +14,7 @@ import MusicPlayer from "@/components/music-player"
 import Sidebar from "@/components/sidebar"
 import PlaylistView from "@/components/playlist-view"
 import UserProfileButton from "@/components/user-profile-button"
+import ContentModal from "@/components/content-modal"
 import type { Playlist, SpotifyUser } from "@/types/spotify"
 import { saveUserPreferences } from "@/lib/supabase/user"
 import { createClient } from "@/lib/supabase/client"
@@ -25,10 +26,12 @@ import { toast } from "@/components/ui/use-toast"
 export default function Home() {
   const searchParams = useSearchParams()
   const code = searchParams.get("code")
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingPlaylists, setIsLoadingPlaylists] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [user, setUser] = useState<SpotifyUser | null>(null)
@@ -39,6 +42,20 @@ export default function Home() {
   const [showPlaylistView, setShowPlaylistView] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
+
+  // Modal states
+  const [isMoodsModalOpen, setIsMoodsModalOpen] = useState(false)
+  const [isArtistsModalOpen, setIsArtistsModalOpen] = useState(false)
+  const [isAlbumsModalOpen, setIsAlbumsModalOpen] = useState(false)
+  const [isRadioModalOpen, setIsRadioModalOpen] = useState(false)
+
+  // Content data
+  const [moods, setMoods] = useState<any[]>([])
+  const [artists, setArtists] = useState<any[]>([])
+  const [albums, setAlbums] = useState<any[]>([])
+  const [podcasts, setPodcasts] = useState<any[]>([])
+  const [isLoadingContent, setIsLoadingContent] = useState(false)
+
   const [availableMoods] = useState([
     "Happy",
     "Sad",
@@ -99,6 +116,7 @@ export default function Home() {
 
               // Load user playlists
               try {
+                setIsLoadingPlaylists(true)
                 const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
                 setPlaylists(userPlaylists)
               } catch (playlistsError) {
@@ -108,6 +126,8 @@ export default function Home() {
                   description: "We couldn't load your playlists. Some features may be limited.",
                   variant: "destructive",
                 })
+              } finally {
+                setIsLoadingPlaylists(false)
               }
             } catch (profileError) {
               console.error("Error loading user profile:", profileError)
@@ -155,6 +175,7 @@ export default function Home() {
       // Load user data and playlists
       const loadUserData = async () => {
         setIsLoading(true)
+        setIsLoadingPlaylists(true)
         try {
           const userProfile = await getUserProfile(storedToken)
           setUser(userProfile)
@@ -171,6 +192,7 @@ export default function Home() {
           setIsLoginModalOpen(true)
         } finally {
           setIsLoading(false)
+          setIsLoadingPlaylists(false)
         }
       }
 
@@ -259,10 +281,113 @@ export default function Home() {
     setPlayerState(state)
   }, [])
 
+  // Function to load recent artists, albums, and podcasts
+  const loadRecentContent = async (type: "artists" | "albums" | "podcasts") => {
+    if (!accessToken) return
+
+    setIsLoadingContent(true)
+    try {
+      // In a real app, you would use specific endpoints for each content type
+      // For this demo, we'll simulate with the recently played tracks endpoint
+      const recentlyPlayed = await getRecentlyPlayedTracks(accessToken)
+
+      if (type === "artists") {
+        // Extract unique artists from recently played tracks
+        const uniqueArtists = Array.from(
+          new Map(
+            recentlyPlayed.items
+              .flatMap((item) => item.track.artists)
+              .map((artist) => [
+                artist.id,
+                {
+                  id: artist.id,
+                  name: artist.name,
+                  imageUrl: "/placeholder.svg?height=200&width=200", // In a real app, you'd fetch artist images
+                  type: "artist",
+                },
+              ]),
+          ).values(),
+        )
+        setArtists(uniqueArtists.slice(0, 10))
+      } else if (type === "albums") {
+        // Extract unique albums from recently played tracks
+        const uniqueAlbums = Array.from(
+          new Map(
+            recentlyPlayed.items.map((item) => [
+              item.track.album.id,
+              {
+                id: item.track.album.id,
+                name: item.track.album.name,
+                imageUrl: item.track.album.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+                description: item.track.artists.map((a) => a.name).join(", "),
+                type: "album",
+              },
+            ]),
+          ).values(),
+        )
+        setAlbums(uniqueAlbums.slice(0, 10))
+      } else if (type === "podcasts") {
+        // For podcasts, we'll just use placeholder data
+        setPodcasts([])
+      }
+    } catch (error) {
+      console.error(`Error loading ${type}:`, error)
+      toast({
+        title: `Error Loading ${type}`,
+        description: `We couldn't load your recent ${type}. Please try again.`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoadingContent(false)
+    }
+  }
+
+  // Function to handle sidebar search click
+  const handleSidebarSearchClick = () => {
+    // Focus the search input in the header
+    if (searchInputRef.current) {
+      searchInputRef.current.focus()
+    }
+  }
+
+  // Function to handle sidebar moods click
+  const handleSidebarMoodsClick = () => {
+    setIsMoodsModalOpen(true)
+    // In a real app, you would load the user's mood playlists here
+    setMoods([])
+  }
+
+  // Function to handle sidebar artists click
+  const handleSidebarArtistsClick = () => {
+    setIsArtistsModalOpen(true)
+    loadRecentContent("artists")
+  }
+
+  // Function to handle sidebar albums click
+  const handleSidebarAlbumsClick = () => {
+    setIsAlbumsModalOpen(true)
+    loadRecentContent("albums")
+  }
+
+  // Function to handle sidebar radio click
+  const handleSidebarRadioClick = () => {
+    setIsRadioModalOpen(true)
+    loadRecentContent("podcasts")
+  }
+
   return (
     <div className="h-screen bg-[#1a1a1a] text-white overflow-hidden">
       <div className={`flex h-full ${isLoginModalOpen ? "blur-sm" : ""}`}>
-        <Sidebar playlists={playlists} onPlaylistSelect={handlePlaylistSelect} />
+        <Sidebar
+          playlists={playlists}
+          onPlaylistSelect={handlePlaylistSelect}
+          onMoodsClick={handleSidebarMoodsClick}
+          onSearchClick={handleSidebarSearchClick}
+          onArtistsClick={handleSidebarArtistsClick}
+          onAlbumsClick={handleSidebarAlbumsClick}
+          onRadioClick={handleSidebarRadioClick}
+          isLoadingPlaylists={isLoadingPlaylists}
+        />
 
         <main className="flex-1 overflow-hidden">
           <div className="h-full flex flex-col">
@@ -318,6 +443,7 @@ export default function Home() {
                 {isAuthenticated && (
                   <div className="ml-4 w-64">
                     <SearchBar
+                      ref={searchInputRef}
                       onSearch={(query) => {
                         setSearchQuery(query)
                         if (query) {
@@ -371,8 +497,15 @@ export default function Home() {
                     playlist={selectedPlaylist}
                     accessToken={accessToken}
                     onTrackPlay={handleTrackPlay}
-                    onPlayerStateChange={handlePlayerStateChange} // Add this prop
+                    onPlayerStateChange={handlePlayerStateChange}
                   />
+                ) : isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="flex flex-col items-center">
+                      <Loader2 className="h-12 w-12 text-[#00FFFF] animate-spin mb-4" />
+                      <p className="text-white/70">Loading your music...</p>
+                    </div>
+                  </div>
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="space-y-8 p-6">
@@ -473,6 +606,7 @@ export default function Home() {
             onPlayPause={handlePlayPause}
             onNext={handleNext}
             onPrevious={handlePrevious}
+            playerState={playerState}
           />
         </div>
       )}
@@ -488,6 +622,76 @@ export default function Home() {
         onPlaylistCreated={(newPlaylist) => {
           setPlaylists([newPlaylist, ...playlists])
           setSelectedPlaylist(newPlaylist)
+        }}
+      />
+
+      {/* Content Modals */}
+      <ContentModal
+        isOpen={isMoodsModalOpen}
+        onClose={() => setIsMoodsModalOpen(false)}
+        title="Your Moods"
+        type="moods"
+        items={moods}
+        isLoading={isLoadingContent}
+        onItemClick={(item) => {
+          // Handle mood click
+          setIsMoodsModalOpen(false)
+          handleMoodSelect(item.name)
+        }}
+        onCreateClick={() => {
+          setIsMoodsModalOpen(false)
+          setIsCreatePlaylistModalOpen(true)
+        }}
+      />
+
+      <ContentModal
+        isOpen={isArtistsModalOpen}
+        onClose={() => setIsArtistsModalOpen(false)}
+        title="Recent Artists"
+        type="artists"
+        items={artists}
+        isLoading={isLoadingContent}
+        onItemClick={(item) => {
+          // Handle artist click
+          setIsArtistsModalOpen(false)
+          toast({
+            title: "Artist Selected",
+            description: `You selected ${item.name}`,
+          })
+        }}
+      />
+
+      <ContentModal
+        isOpen={isAlbumsModalOpen}
+        onClose={() => setIsAlbumsModalOpen(false)}
+        title="Recent Albums"
+        type="albums"
+        items={albums}
+        isLoading={isLoadingContent}
+        onItemClick={(item) => {
+          // Handle album click
+          setIsAlbumsModalOpen(false)
+          toast({
+            title: "Album Selected",
+            description: `You selected ${item.name}`,
+          })
+        }}
+      />
+
+      <ContentModal
+        isOpen={isRadioModalOpen}
+        onClose={() => setIsRadioModalOpen(false)}
+        title="Podcasts"
+        type="podcasts"
+        items={podcasts}
+        isLoading={isLoadingContent}
+        onItemClick={(item) => {
+          // Handle podcast click
+          setIsRadioModalOpen(false)
+          toast({
+            title: "Podcast Selected",
+            description: `You selected ${item.name}`,
+          })
         }}
       />
 
