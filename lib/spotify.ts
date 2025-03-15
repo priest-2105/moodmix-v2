@@ -257,6 +257,16 @@ export async function getRecentlyPlayedTracks(accessToken: string) {
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Recently played tracks error response:", errorText)
+
+      // If we get a 403, it's likely a permissions issue
+      if (response.status === 403) {
+        throw new Error(
+          `Failed to get recently played tracks: ${response.status} ${response.statusText} - You may need to re-authenticate with the 'user-read-recently-played' scope`,
+        )
+      }
+
       throw new Error(`Failed to get recently played tracks: ${response.status} ${response.statusText}`)
     }
 

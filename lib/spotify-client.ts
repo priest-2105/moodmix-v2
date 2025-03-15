@@ -19,7 +19,8 @@ const SCOPES = [
   "user-top-read",
   "user-read-playback-state",
   "user-modify-playback-state",
-  "streaming", // Add this scope for Web Playback SDK
+  "streaming", 
+  "user-read-recently-played", 
 ]
 
 export function getSpotifyAuthUrl() {
