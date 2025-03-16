@@ -114,14 +114,28 @@ export default function CreatePlaylistModal({
         // Get recommendations based on mood
         try {
           console.log("Getting recommendations for mood:", selectedMood)
-          const recommendations = await getRecommendations(accessToken || "", {
-            seed_genres: getMoodGenres(selectedMood),
-            limit: 20,
-            ...selectedMoodParams,
-          })
 
-          if (recommendations && recommendations.tracks) {
+          // Prepare parameters based on mood type
+          const moodParams = moodTypes.find((m) => m.id === selectedMood)?.params || {}
+
+          // Add more parameters for better recommendations
+          const recommendationParams = {
+            seed_genres: getMoodGenres(selectedMood).join(","),
+            limit: 30, // Request more tracks to ensure we get enough
+            ...moodParams,
+            market: "US", // Add market parameter for better results
+          }
+
+          console.log("Recommendation parameters:", recommendationParams)
+
+          const recommendations = await getRecommendations(accessToken || "", recommendationParams)
+
+          if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
             tracks = recommendations.tracks
+            console.log(`Got ${tracks.length} recommended tracks`)
+          } else {
+            console.warn("No recommendations returned, using fallback tracks")
+            tracks = getFallbackTracks()
           }
         } catch (recError) {
           console.error("Error getting recommendations:", recError)
@@ -224,43 +238,32 @@ export default function CreatePlaylistModal({
   const getMoodGenres = (mood: string): string[] => {
     switch (mood) {
       case "happy":
-        return ["pop", "happy", "dance"]
+        return ["pop", "happy", "dance", "disco", "funk"]
       case "sad":
-        return ["sad", "indie", "singer-songwriter"]
+        return ["sad", "indie", "singer-songwriter", "piano", "folk"]
       case "energetic":
-        return ["edm", "rock", "workout"]
+        return ["edm", "rock", "workout", "electronic", "dance"]
       case "relaxed":
-        return ["chill", "ambient", "sleep"]
+        return ["chill", "ambient", "sleep", "acoustic", "jazz"]
       case "focused":
-        return ["study", "classical", "instrumental"]
+        return ["study", "classical", "instrumental", "ambient", "piano"]
       default:
         return ["pop"]
     }
   }
 
   const getFallbackTracks = () => {
-    return [
-      {
-        id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
-        uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
-        name: "Fallback Track 1",
-        artists: [{ name: "Fallback Artist" }],
-        album: {
-          name: "Fallback Album",
-          images: [{ url: "/placeholder.svg?height=200&width=200" }],
-        },
+    // Create 20 fallback tracks instead of just 2
+    return Array.from({ length: 20 }, (_, i) => ({
+      id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
+      uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
+      name: `Fallback Track ${i + 1}`,
+      artists: [{ name: "Fallback Artist" }],
+      album: {
+        name: "Fallback Album",
+        images: [{ url: "/placeholder.svg?height=200&width=200" }],
       },
-      {
-        id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
-        uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
-        name: "Fallback Track 2",
-        artists: [{ name: "Fallback Artist" }],
-        album: {
-          name: "Fallback Album",
-          images: [{ url: "/placeholder.svg?height=200&width=200" }],
-        },
-      },
-    ]
+    }))
   }
 
   return (
