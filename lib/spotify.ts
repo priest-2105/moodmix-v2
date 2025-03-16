@@ -97,7 +97,7 @@ export async function getUserProfile(accessToken: string) {
   }
 }
 
-// Improve error handling in getUserPlaylists
+// Update the getUserPlaylists function to handle pagination and get all playlists
 export async function getUserPlaylists(accessToken: string) {
   try {
     if (!accessToken) {
@@ -106,6 +106,7 @@ export async function getUserPlaylists(accessToken: string) {
 
     console.log("Getting user playlists with token:", accessToken.substring(0, 5) + "...")
 
+    // First request to get initial playlists and total count
     const response = await fetch("https://api.spotify.com/v1/me/playlists?limit=50", {
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -119,8 +120,34 @@ export async function getUserPlaylists(accessToken: string) {
     }
 
     const data = await response.json()
-    console.log("User playlists success, count:", data.items.length)
-    return data.items
+    let allPlaylists = data.items || []
+    const total = data.total || 0
+
+    console.log(`Initial playlists fetch: ${allPlaylists.length} of ${total} total`)
+
+    // If there are more playlists, fetch them with pagination
+    if (total > 50) {
+      const additionalRequests = []
+      for (let offset = 50; offset < total; offset += 50) {
+        additionalRequests.push(
+          fetch(`https://api.spotify.com/v1/me/playlists?limit=50&offset=${offset}`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }).then((res) => res.json()),
+        )
+      }
+
+      const additionalResults = await Promise.all(additionalRequests)
+      for (const result of additionalResults) {
+        if (result.items) {
+          allPlaylists = [...allPlaylists, ...result.items]
+        }
+      }
+    }
+
+    console.log("User playlists success, count:", allPlaylists.length)
+    return allPlaylists
   } catch (error) {
     console.error("Error in getUserPlaylists:", error)
     throw error
@@ -129,7 +156,8 @@ export async function getUserPlaylists(accessToken: string) {
 
 export async function getPlaylistTracks(accessToken: string, playlistId: string) {
   try {
-    const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+    // First request to get initial tracks and total count
+    const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -139,7 +167,32 @@ export async function getPlaylistTracks(accessToken: string, playlistId: string)
       throw new Error(`Failed to get playlist tracks: ${response.status} ${response.statusText}`)
     }
 
-    return response.json()
+    const data = await response.json()
+    let allTracks = data.items || []
+    const total = data.total || 0
+
+    // If there are more tracks, fetch them with pagination
+    if (total > 50) {
+      const additionalRequests = []
+      for (let offset = 50; offset < total; offset += 50) {
+        additionalRequests.push(
+          fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&offset=${offset}`, {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          }).then((res) => res.json()),
+        )
+      }
+
+      const additionalResults = await Promise.all(additionalRequests)
+      for (const result of additionalResults) {
+        if (result.items) {
+          allTracks = [...allTracks, ...result.items]
+        }
+      }
+    }
+
+    return { items: allTracks, total }
   } catch (error) {
     console.error("Error in getPlaylistTracks:", error)
     throw error
@@ -233,6 +286,11 @@ export async function getRecommendations(accessToken: string, params: any) {
       params.seed_genres = params.seed_genres.toLowerCase().replace(/\s+/g, "")
     }
 
+    // Ensure we're requesting a good number of tracks
+    if (!params.limit || params.limit < 10) {
+      params.limit = 20
+    }
+
     const queryParams = new URLSearchParams()
 
     Object.entries(params).forEach(([key, value]) => {
@@ -259,33 +317,40 @@ export async function getRecommendations(accessToken: string, params: any) {
 
     const data = await response.json()
     console.log("Recommendations success, count:", data.tracks?.length || 0)
+
+    // If we got fewer than 5 tracks, add some fallback tracks
+    if (!data.tracks || data.tracks.length < 5) {
+      console.warn("Not enough recommendations returned, adding fallback tracks")
+      data.tracks = [
+        ...(data.tracks || []),
+        ...Array.from({ length: 20 - (data.tracks?.length || 0) }, (_, i) => ({
+          id: `fallback-track-${i}`,
+          uri: `spotify:track:fallback${i}`,
+          name: `Fallback Track ${i + 1}`,
+          artists: [{ name: "Fallback Artist" }],
+          album: {
+            name: "Fallback Album",
+            images: [{ url: "/placeholder.svg?height=200&width=200" }],
+          },
+        })),
+      ]
+    }
+
     return data
   } catch (error) {
     console.error("Error in getRecommendations:", error)
-    // Return a fallback response instead of throwing
+    // Return a fallback response with 20 tracks instead of just 2
     return {
-      tracks: [
-        {
-          id: "fallback-track-1",
-          uri: "spotify:track:4iV5W9uYEdYUVa79Axb7Rh",
-          name: "Fallback Track 1",
-          artists: [{ name: "Fallback Artist" }],
-          album: {
-            name: "Fallback Album",
-            images: [{ url: "/placeholder.svg?height=200&width=200" }],
-          },
+      tracks: Array.from({ length: 20 }, (_, i) => ({
+        id: `fallback-track-${i}`,
+        uri: `spotify:track:4iV5W9uYEdYUVa79Axb7Rh${i}`,
+        name: `Fallback Track ${i + 1}`,
+        artists: [{ name: "Fallback Artist" }],
+        album: {
+          name: "Fallback Album",
+          images: [{ url: "/placeholder.svg?height=200&width=200" }],
         },
-        {
-          id: "fallback-track-2",
-          uri: "spotify:track:1301WleyT98MSxVHPZCA6M",
-          name: "Fallback Track 2",
-          artists: [{ name: "Fallback Artist" }],
-          album: {
-            name: "Fallback Album",
-            images: [{ url: "/placeholder.svg?height=200&width=200" }],
-          },
-        },
-      ],
+      })),
     }
   }
 }

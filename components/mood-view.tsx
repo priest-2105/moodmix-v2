@@ -27,6 +27,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
       setIsLoading(true)
       try {
         const moodTracks = await getMoodTracks(mood.id)
+        console.log(`Fetched ${moodTracks.length} tracks for mood ${mood.name}`)
 
         // Convert mood tracks to a format similar to Spotify tracks
         const formattedTracks = moodTracks.map((track) => ({
@@ -43,6 +44,14 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
         }))
 
         setTracks(formattedTracks)
+
+        if (formattedTracks.length === 0) {
+          toast({
+            title: "No tracks found",
+            description: "This mood doesn't have any tracks. Try creating a new mood.",
+            variant: "destructive",
+          })
+        }
       } catch (error) {
         console.error("Error fetching mood tracks:", error)
         toast({

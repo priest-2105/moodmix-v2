@@ -139,7 +139,17 @@ export default function Home() {
             try {
               setIsLoadingPlaylists(true)
               const userPlaylists = await getUserPlaylists(tokenResponse.access_token)
+              console.log(`Loaded ${userPlaylists.length} playlists from Spotify`)
               setPlaylists(userPlaylists)
+
+              // If we didn't get any playlists, show a message
+              if (userPlaylists.length === 0) {
+                toast({
+                  title: "No playlists found",
+                  description: "We couldn't find any playlists in your Spotify account.",
+                  variant: "default",
+                })
+              }
             } catch (playlistsError) {
               console.error("Error loading playlists:", playlistsError)
               toast({
@@ -974,4 +984,3 @@ export default function Home() {
   )
 }
 
-n
