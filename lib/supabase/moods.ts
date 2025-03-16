@@ -1,66 +1,31 @@
-"use server"
-
 import { createClient } from "@supabase/supabase-js"
+import { validate as uuidValidate, version as uuidVersion } from "uuid"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY as string
+// Supabase configuration
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export interface MoodData {
-  id?: string
-  user_id: string
-  name: string
-  description?: string | null
-  mood_type: string
-  image_url?: string | null
-  created_at?: string
-}
-
-export interface MoodTrack {
-  id?: string
+// MoodTrack interface
+interface MoodTrack {
   mood_id: string
   track_id: string
   track_uri: string
   track_name: string
   artist_name: string
-  album_name?: string | null
-  album_image_url?: string | null
-  added_at?: string
+  album_name: string | null
+  album_image_url: string | null
+  added_at?: string // Optional because Supabase can handle the default
 }
 
-// Helper function to validate UUID format
-function isValidUUID(uuid: string): boolean {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-  return uuidRegex.test(uuid)
-}
-
-export async function saveMood(userId: string, moodData: Omit<MoodData, "user_id">) {
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
-  // Log the exact data we're sending to Supabase
-  const moodToInsert = {
-    user_id: userId, // Use Spotify ID directly
-    name: moodData.name,
-    description: moodData.description || null,
-    mood_type: moodData.mood_type || "custom",
-    image_url: moodData.image_url || null,
-    // Let Supabase handle the created_at timestamp with its default value
+// UUID validation function
+function isValidUUID(uuid: string) {
+  if (!uuidValidate(uuid)) {
+    return false
   }
-
-  console.log("Saving mood with exact data:", JSON.stringify(moodToInsert, null, 2))
-
-  try {
-    const { data, error } = await supabase.from("moods").insert(moodToInsert).select().single()
-
-    if (error) {
-      console.error("Error saving mood:", error)
-      throw error
-    }
-
-    return data
-  } catch (err) {
-    console.error("Exception in saveMood:", err)
-    throw err
+  if (uuidVersion(uuid) !== 4) {
+    return false
   }
+  return true
 }
 
 export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mood_id" | "added_at">[]) {
@@ -72,20 +37,32 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
     throw new Error("Invalid mood ID format. Must be a valid UUID.")
   }
 
-  // Ensure all required fields are present and properly formatted
-  const tracksWithMoodId = tracks.map((track) => ({
-    mood_id: moodId,
-    track_id: track.track_id || `unknown-${Date.now()}`,
-    track_uri: track.track_uri || `spotify:track:unknown-${Date.now()}`,
-    track_name: track.track_name || "Unknown Track",
-    artist_name: track.artist_name || "Unknown Artist",
-    album_name: track.album_name || null,
-    album_image_url: track.album_image_url || null,
-    // Let Supabase handle the added_at timestamp with its default value
-  }))
+  // Log the tracks we're about to save
+  console.log(`Preparing to save ${tracks.length} tracks for mood ID: ${moodId}`)
+  if (tracks.length > 0) {
+    console.log("First track sample:", JSON.stringify(tracks[0], null, 2))
+  }
 
-  console.log(`Saving ${tracksWithMoodId.length} tracks for mood ID: ${moodId}`)
-  console.log("First track sample:", JSON.stringify(tracksWithMoodId[0], null, 2))
+  // Ensure all required fields are present and properly formatted
+  const tracksWithMoodId = tracks.map((track) => {
+    // Check if this is a fallback track
+    const isFallback = track.track_id.includes("fallback") || track.track_uri.includes("fallback")
+
+    if (isFallback) {
+      console.warn("Detected fallback track:", track.track_name)
+    }
+
+    return {
+      mood_id: moodId,
+      track_id: track.track_id || `unknown-${Date.now()}`,
+      track_uri: track.track_uri || `spotify:track:unknown-${Date.now()}`,
+      track_name: track.track_name || "Unknown Track",
+      artist_name: track.artist_name || "Unknown Artist",
+      album_name: track.album_name || null,
+      album_image_url: track.album_image_url || null,
+      // Let Supabase handle the added_at timestamp with its default value
+    }
+  })
 
   try {
     // For large track lists, we might need to batch the inserts
@@ -123,55 +100,48 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
   }
 }
 
-export async function getUserMoods(userId: string) {
+export async function saveMood(userId: string, moodData: any) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  console.log(`Getting moods for Spotify ID ${userId}`)
+  const { data, error } = await supabase
+    .from("moods")
+    .upsert({
+      user_id: userId,
+      ...moodData,
+    })
+    .select()
 
-  try {
-    const { data, error } = await supabase
-      .from("moods")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error getting user moods:", error)
-      return []
-    }
-
-    return data || []
-  } catch (err) {
-    console.error("Exception in getUserMoods:", err)
-    return []
+  if (error) {
+    console.error("Error saving mood:", error)
+    throw error
   }
+
+  return data[0]
 }
 
 export async function getMoodTracks(moodId: string) {
   const supabase = createClient(supabaseUrl, supabaseKey)
 
-  // Validate moodId is a valid UUID
-  if (!isValidUUID(moodId)) {
-    console.error("Invalid mood ID format in getMoodTracks. Expected UUID, got:", moodId)
+  const { data, error } = await supabase.from("mood_tracks").select("*").eq("mood_id", moodId)
+
+  if (error) {
+    console.error("Error getting mood tracks:", error)
     return []
   }
 
-  try {
-    const { data, error } = await supabase
-      .from("mood_tracks")
-      .select("*")
-      .eq("mood_id", moodId)
-      .order("added_at", { ascending: false })
+  return data
+}
 
-    if (error) {
-      console.error("Error getting mood tracks:", error)
-      return []
-    }
+export async function getUserMoods(userId: string) {
+  const supabase = createClient(supabaseUrl, supabaseKey)
 
-    return data || []
-  } catch (err) {
-    console.error("Exception in getMoodTracks:", err)
+  const { data, error } = await supabase.from("moods").select("*").eq("user_id", userId)
+
+  if (error) {
+    console.error("Error getting user moods:", error)
     return []
   }
+
+  return data
 }
 

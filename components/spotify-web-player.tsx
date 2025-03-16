@@ -204,6 +204,18 @@ export default function SpotifyWebPlayer({
     const handlePlayback = async () => {
       try {
         if (isPlaying && currentTrackUri) {
+          // Check if this is a fallback track
+          if (currentTrackUri.includes("fallback")) {
+            console.error("Cannot play fallback track:", currentTrackUri)
+            toast({
+              title: "Playback Error",
+              description:
+                "This track cannot be played because it's a fallback track. Please create a new mood with real Spotify tracks.",
+              variant: "destructive",
+            })
+            return
+          }
+
           console.log("Playing track:", currentTrackUri)
 
           // Play the track on the web player
@@ -216,6 +228,13 @@ export default function SpotifyWebPlayer({
             body: JSON.stringify({
               uris: [currentTrackUri],
             }),
+          }).then((response) => {
+            if (!response.ok) {
+              return response.text().then((text) => {
+                console.error("Playback error response:", text)
+                throw new Error(`Failed to play track: ${response.status} ${response.statusText}`)
+              })
+            }
           })
         } else if (!isPlaying && player) {
           console.log("Pausing playback")

@@ -274,6 +274,11 @@ export async function addTracksToPlaylist(accessToken: string, playlistId: strin
 
 export async function getRecommendations(accessToken: string, params: any) {
   try {
+    if (!accessToken) {
+      console.error("No access token provided for recommendations")
+      throw new Error("Access token is required")
+    }
+
     // Make sure we have valid seed values
     if (!params.seed_genres && !params.seed_artists && !params.seed_tracks) {
       console.error("Missing seed values for recommendations")
@@ -287,7 +292,7 @@ export async function getRecommendations(accessToken: string, params: any) {
     }
 
     // Ensure we're requesting a good number of tracks
-    if (!params.limit || params.limit < 10) {
+    if (!params.limit || params.limit < 5) {
       params.limit = 20
     }
 
@@ -316,42 +321,38 @@ export async function getRecommendations(accessToken: string, params: any) {
     }
 
     const data = await response.json()
-    console.log("Recommendations success, count:", data.tracks?.length || 0)
 
-    // If we got fewer than 5 tracks, add some fallback tracks
-    if (!data.tracks || data.tracks.length < 5) {
-      console.warn("Not enough recommendations returned, adding fallback tracks")
-      data.tracks = [
-        ...(data.tracks || []),
-        ...Array.from({ length: 20 - (data.tracks?.length || 0) }, (_, i) => ({
-          id: `fallback-track-${i}`,
-          uri: `spotify:track:fallback${i}`,
-          name: `Fallback Track ${i + 1}`,
-          artists: [{ name: "Fallback Artist" }],
-          album: {
-            name: "Fallback Album",
-            images: [{ url: "/placeholder.svg?height=200&width=200" }],
-          },
+    // Validate the response data
+    if (!data.tracks || !Array.isArray(data.tracks)) {
+      console.error("Invalid recommendations response:", data)
+      throw new Error("Invalid recommendations response from Spotify")
+    }
+
+    console.log("Recommendations success, count:", data.tracks.length)
+
+    // Log detailed information about the first few tracks
+    if (data.tracks.length > 0) {
+      console.log(
+        "First 3 recommended tracks:",
+        data.tracks.slice(0, 3).map((track) => ({
+          id: track.id,
+          name: track.name,
+          uri: track.uri,
+          artists: track.artists?.map((a: any) => a.name).join(", "),
+          album: track.album?.name,
+          albumImage: track.album?.images?.[0]?.url,
         })),
-      ]
+      )
+    } else {
+      console.warn("No tracks returned from recommendations API")
     }
 
     return data
   } catch (error) {
     console.error("Error in getRecommendations:", error)
-    // Return a fallback response with 20 tracks instead of just 2
-    return {
-      tracks: Array.from({ length: 20 }, (_, i) => ({
-        id: `fallback-track-${i}`,
-        uri: `spotify:track:4iV5W9uYEdYUVa79Axb7Rh${i}`,
-        name: `Fallback Track ${i + 1}`,
-        artists: [{ name: "Fallback Artist" }],
-        album: {
-          name: "Fallback Album",
-          images: [{ url: "/placeholder.svg?height=200&width=200" }],
-        },
-      })),
-    }
+
+    // Instead of returning fallback tracks, throw the error to be handled by the caller
+    throw error
   }
 }
 

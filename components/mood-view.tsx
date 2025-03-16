@@ -29,6 +29,16 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
         const moodTracks = await getMoodTracks(mood.id)
         console.log(`Fetched ${moodTracks.length} tracks for mood ${mood.name}`)
 
+        // Log the first track to verify structure
+        if (moodTracks.length > 0) {
+          console.log("Sample track from mood:", {
+            id: moodTracks[0].track_id,
+            name: moodTracks[0].track_name,
+            artist: moodTracks[0].artist_name,
+            album: moodTracks[0].album_name,
+          })
+        }
+
         // Convert mood tracks to a format similar to Spotify tracks
         const formattedTracks = moodTracks.map((track) => ({
           id: track.track_id,
@@ -90,6 +100,25 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
     } else {
       setCurrentTrackIndex(index)
       setIsPlaying(true)
+
+      // Log the track being played
+      console.log("Playing track:", {
+        id: tracks[index].id,
+        name: tracks[index].name,
+        uri: tracks[index].uri,
+        artists: tracks[index].artists?.map((a: any) => a.name).join(", "),
+      })
+
+      // Check if the track has a valid URI before playing
+      if (!tracks[index].uri || tracks[index].uri.includes("fallback")) {
+        toast({
+          title: "Playback Error",
+          description:
+            "This track cannot be played because it's a fallback track. Please create a new mood to get playable tracks.",
+          variant: "destructive",
+        })
+      }
+
       onTrackPlay(tracks[index])
     }
   }

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
 import { getRecommendations, getPlaylistTracks } from "@/lib/spotify"
 import { saveMood, saveMoodTracks } from "@/lib/supabase/moods"
 import type { Playlist } from "@/types/spotify"
@@ -55,11 +56,68 @@ export default function CreatePlaylistModal({
   const [selectedMood, setSelectedMood] = useState("happy")
   const [sourceType, setSourceType] = useState("random")
   const [sourcePlaylist, setSourcePlaylist] = useState("")
+  const [trackCount, setTrackCount] = useState(20) // Default to 20 tracks
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [customImage, setCustomImage] = useState<string | null>(null)
   const [useCustomImage, setUseCustomImage] = useState(false)
   const { toast } = useToast()
+
+  // Test function to directly check Spotify API
+  const testSpotifyRecommendations = async () => {
+    if (!accessToken) {
+      console.error("No access token available for testing")
+      return
+    }
+
+    try {
+      console.log("Testing direct Spotify API call for recommendations...")
+
+      // Simple parameters for testing
+      const testParams = {
+        seed_genres: "pop,rock",
+        limit: 5,
+        market: "US",
+      }
+
+      const response = await fetch(
+        `https://api.spotify.com/v1/recommendations?${new URLSearchParams(testParams).toString()}`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        },
+      )
+
+      if (!response.ok) {
+        console.error("Test API call failed:", response.status, response.statusText)
+        const errorText = await response.text()
+        console.error("Error response:", errorText)
+        return
+      }
+
+      const data = await response.json()
+      console.log("Direct API test successful, received tracks:", data.tracks?.length)
+
+      if (data.tracks && data.tracks.length > 0) {
+        console.log("Sample track from direct API:", {
+          id: data.tracks[0].id,
+          name: data.tracks[0].name,
+          uri: data.tracks[0].uri,
+          artists: data.tracks[0].artists?.map((a: any) => a.name).join(", "),
+        })
+      }
+    } catch (error) {
+      console.error("Error in direct API test:", error)
+    }
+  }
+
+  // Call this function when the modal opens
+  useEffect(() => {
+    if (isOpen && accessToken) {
+      testSpotifyRecommendations()
+    }
+  }, [isOpen, accessToken])
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -103,12 +161,27 @@ export default function CreatePlaylistModal({
           const playlistTracks = await getPlaylistTracks(accessToken || "", sourcePlaylist)
 
           if (playlistTracks && playlistTracks.items) {
-            tracks = playlistTracks.items.map((item: any) => item.track).slice(0, 20)
+            tracks = playlistTracks.items.map((item: any) => item.track).slice(0, trackCount)
+            console.log(`Got ${tracks.length} tracks from playlist`)
+
+            // Log the first track to verify structure
+            if (tracks.length > 0) {
+              console.log("Sample track from playlist:", {
+                id: tracks[0].id,
+                name: tracks[0].name,
+                artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
+                album: tracks[0].album?.name,
+              })
+            }
           }
         } catch (playlistError) {
           console.error("Error getting playlist tracks:", playlistError)
-          // Continue with fallback tracks
-          tracks = getFallbackTracks()
+          toast({
+            title: "Error Getting Playlist Tracks",
+            description: "Could not retrieve tracks from the selected playlist. Using fallback tracks instead.",
+            variant: "destructive",
+          })
+          tracks = getFallbackTracks(trackCount)
         }
       } else {
         // Get recommendations based on mood
@@ -121,31 +194,63 @@ export default function CreatePlaylistModal({
           // Add more parameters for better recommendations
           const recommendationParams = {
             seed_genres: getMoodGenres(selectedMood).join(","),
-            limit: 30, // Request more tracks to ensure we get enough
+            limit: Math.min(trackCount, 30), // Request the number of tracks the user wants, max 30
             ...moodParams,
             market: "US", // Add market parameter for better results
           }
 
           console.log("Recommendation parameters:", recommendationParams)
 
-          const recommendations = await getRecommendations(accessToken || "", recommendationParams)
+          try {
+            const recommendations = await getRecommendations(accessToken || "", recommendationParams)
 
-          if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
-            tracks = recommendations.tracks
-            console.log(`Got ${tracks.length} recommended tracks`)
-          } else {
-            console.warn("No recommendations returned, using fallback tracks")
-            tracks = getFallbackTracks()
+            if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
+              tracks = recommendations.tracks
+              console.log(`Got ${tracks.length} recommended tracks`)
+
+              // Log the first track to verify structure
+              if (tracks.length > 0) {
+                console.log("Sample recommended track:", {
+                  id: tracks[0].id,
+                  name: tracks[0].name,
+                  uri: tracks[0].uri,
+                  artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
+                  album: tracks[0].album?.name,
+                  albumImage: tracks[0].album?.images?.[0]?.url,
+                })
+              }
+            } else {
+              console.warn("No recommendations returned, using fallback tracks")
+              toast({
+                title: "No Recommendations Found",
+                description: "Could not get track recommendations from Spotify. Using fallback tracks instead.",
+                variant: "destructive",
+              })
+              tracks = getFallbackTracks(trackCount)
+            }
+          } catch (recError) {
+            console.error("Error getting recommendations:", recError)
+            toast({
+              title: "Error Getting Recommendations",
+              description: "Could not retrieve track recommendations. Using fallback tracks instead.",
+              variant: "destructive",
+            })
+            tracks = getFallbackTracks(trackCount)
           }
-        } catch (recError) {
-          console.error("Error getting recommendations:", recError)
-          // Fallback to sample tracks
-          tracks = getFallbackTracks()
+        } catch (err) {
+          console.error("Error in recommendations process:", err)
+          toast({
+            title: "Error",
+            description: "Failed to process recommendations. Using fallback tracks instead.",
+            variant: "destructive",
+          })
+          tracks = getFallbackTracks(trackCount)
         }
       }
 
       if (tracks.length === 0) {
-        tracks = getFallbackTracks()
+        console.warn("No tracks found, using fallback tracks")
+        tracks = getFallbackTracks(trackCount)
       }
 
       // Determine image URL
@@ -172,15 +277,30 @@ export default function CreatePlaylistModal({
 
         console.log("Mood saved successfully with ID:", savedMood.id)
 
-        // Prepare track data
-        const trackData = tracks.map((track) => ({
-          track_id: track.id || `unknown-${Math.random().toString(36).substring(2, 9)}`,
-          track_uri: track.uri || `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
-          track_name: track.name || "Unknown Track",
-          artist_name: track.artists ? track.artists.map((a: any) => a.name).join(", ") : "Unknown Artist",
-          album_name: track.album?.name || null,
-          album_image_url: track.album?.images?.[0]?.url || null,
-        }))
+        // Prepare track data - ensure we're using the actual track data
+        const trackData = tracks.map((track) => {
+          // Check if this is a fallback track
+          const isFallback = track.id.includes("fallback") || track.uri.includes("fallback")
+
+          if (isFallback) {
+            console.warn("Detected fallback track:", track.name)
+          } else {
+            console.log("Processing real Spotify track:", {
+              id: track.id,
+              name: track.name,
+              uri: track.uri,
+            })
+          }
+
+          return {
+            track_id: track.id,
+            track_uri: track.uri,
+            track_name: track.name,
+            artist_name: track.artists ? track.artists.map((a: any) => a.name).join(", ") : "Unknown Artist",
+            album_name: track.album?.name || null,
+            album_image_url: track.album?.images?.[0]?.url || null,
+          }
+        })
 
         // Save tracks to Supabase
         console.log(`Saving ${trackData.length} tracks for mood ID: ${savedMood.id}`)
@@ -195,7 +315,7 @@ export default function CreatePlaylistModal({
         // Show success toast
         toast({
           title: "Mood Created",
-          description: `Your "${name}" mood has been created successfully.`,
+          description: `Your "${name}" mood has been created successfully with ${trackData.length} tracks.`,
         })
 
         // Close modal
@@ -207,6 +327,7 @@ export default function CreatePlaylistModal({
         setSelectedMood("happy")
         setSourceType("random")
         setSourcePlaylist("")
+        setTrackCount(20)
         setCustomImage(null)
         setUseCustomImage(false)
       } catch (dbError) {
@@ -252,11 +373,11 @@ export default function CreatePlaylistModal({
     }
   }
 
-  const getFallbackTracks = () => {
-    // Create 20 fallback tracks instead of just 2
-    return Array.from({ length: 20 }, (_, i) => ({
-      id: `unknown-${Math.random().toString(36).substring(2, 9)}`,
-      uri: `spotify:track:unknown-${Math.random().toString(36).substring(2, 9)}`,
+  const getFallbackTracks = (count: number) => {
+    // Create fallback tracks with the requested count
+    return Array.from({ length: count }, (_, i) => ({
+      id: `fallback-${Math.random().toString(36).substring(2, 9)}`,
+      uri: `spotify:track:fallback-${Math.random().toString(36).substring(2, 9)}`,
       name: `Fallback Track ${i + 1}`,
       artists: [{ name: "Fallback Artist" }],
       album: {
@@ -310,6 +431,12 @@ export default function CreatePlaylistModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Number of Tracks: {trackCount}</Label>
+            <Slider value={[trackCount]} min={5} max={30} step={1} onValueChange={(value) => setTrackCount(value[0])} />
+            <p className="text-xs text-muted-foreground">Select between 5 and 30 tracks for your mood</p>
           </div>
 
           <div className="space-y-2">
@@ -379,7 +506,7 @@ export default function CreatePlaylistModal({
                 <SelectTrigger>
                   <SelectValue placeholder="Select a playlist" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-[300px]">
                   {existingPlaylists.map((playlist) => (
                     <SelectItem key={playlist.id} value={playlist.id}>
                       {playlist.name}
