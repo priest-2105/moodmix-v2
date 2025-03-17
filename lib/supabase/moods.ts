@@ -43,15 +43,22 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
     console.log("First track sample:", JSON.stringify(tracks[0], null, 2))
   }
 
-  // Ensure all required fields are present and properly formatted
-  const tracksWithMoodId = tracks.map((track) => {
-    // Check if this is a fallback track
+  // Filter out any fallback tracks
+  const validTracks = tracks.filter((track) => {
     const isFallback = track.track_id.includes("fallback") || track.track_uri.includes("fallback")
-
     if (isFallback) {
-      console.warn("Detected fallback track:", track.track_name)
+      console.warn("Skipping fallback track:", track.track_name)
+      return false
     }
+    return true
+  })
 
+  if (validTracks.length === 0) {
+    throw new Error("No valid tracks to save. All tracks were fallback tracks.")
+  }
+
+  // Ensure all required fields are present and properly formatted
+  const tracksWithMoodId = validTracks.map((track) => {
     return {
       mood_id: moodId,
       track_id: track.track_id || `unknown-${Date.now()}`,

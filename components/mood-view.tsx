@@ -113,10 +113,10 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
       if (!tracks[index].uri || tracks[index].uri.includes("fallback")) {
         toast({
           title: "Playback Error",
-          description:
-            "This track cannot be played because it's a fallback track. Please create a new mood to get playable tracks.",
+          description: "This track cannot be played. Please try another track or create a new mood.",
           variant: "destructive",
         })
+        return // Add this to prevent playing fallback tracks
       }
 
       onTrackPlay(tracks[index])

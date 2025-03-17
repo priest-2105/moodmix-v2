@@ -160,7 +160,7 @@ export default function CreatePlaylistModal({
         try {
           const playlistTracks = await getPlaylistTracks(accessToken || "", sourcePlaylist)
 
-          if (playlistTracks && playlistTracks.items) {
+          if (playlistTracks && playlistTracks.items && playlistTracks.items.length > 0) {
             tracks = playlistTracks.items.map((item: any) => item.track).slice(0, trackCount)
             console.log(`Got ${tracks.length} tracks from playlist`)
 
@@ -173,15 +173,16 @@ export default function CreatePlaylistModal({
                 album: tracks[0].album?.name,
               })
             }
+          } else {
+            setError("No tracks found in the selected playlist.")
+            setIsLoading(false)
+            return
           }
         } catch (playlistError) {
           console.error("Error getting playlist tracks:", playlistError)
-          toast({
-            title: "Error Getting Playlist Tracks",
-            description: "Could not retrieve tracks from the selected playlist. Using fallback tracks instead.",
-            variant: "destructive",
-          })
-          tracks = getFallbackTracks(trackCount)
+          setError("Could not retrieve tracks from the selected playlist. Please try again.")
+          setIsLoading(false)
+          return
         }
       } else {
         // Get recommendations based on mood
@@ -201,56 +202,41 @@ export default function CreatePlaylistModal({
 
           console.log("Recommendation parameters:", recommendationParams)
 
-          try {
-            const recommendations = await getRecommendations(accessToken || "", recommendationParams)
+          const recommendations = await getRecommendations(accessToken || "", recommendationParams)
 
-            if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
-              tracks = recommendations.tracks
-              console.log(`Got ${tracks.length} recommended tracks`)
+          if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
+            tracks = recommendations.tracks
+            console.log(`Got ${tracks.length} recommended tracks`)
 
-              // Log the first track to verify structure
-              if (tracks.length > 0) {
-                console.log("Sample recommended track:", {
-                  id: tracks[0].id,
-                  name: tracks[0].name,
-                  uri: tracks[0].uri,
-                  artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
-                  album: tracks[0].album?.name,
-                  albumImage: tracks[0].album?.images?.[0]?.url,
-                })
-              }
-            } else {
-              console.warn("No recommendations returned, using fallback tracks")
-              toast({
-                title: "No Recommendations Found",
-                description: "Could not get track recommendations from Spotify. Using fallback tracks instead.",
-                variant: "destructive",
+            // Log the first track to verify structure
+            if (tracks.length > 0) {
+              console.log("Sample recommended track:", {
+                id: tracks[0].id,
+                name: tracks[0].name,
+                uri: tracks[0].uri,
+                artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
+                album: tracks[0].album?.name,
+                albumImage: tracks[0].album?.images?.[0]?.url,
               })
-              tracks = getFallbackTracks(trackCount)
             }
-          } catch (recError) {
-            console.error("Error getting recommendations:", recError)
-            toast({
-              title: "Error Getting Recommendations",
-              description: "Could not retrieve track recommendations. Using fallback tracks instead.",
-              variant: "destructive",
-            })
-            tracks = getFallbackTracks(trackCount)
+          } else {
+            // Instead of using fallback tracks, show an error and stop the process
+            setError("No recommendations found. Please try different mood settings.")
+            setIsLoading(false)
+            return
           }
-        } catch (err) {
-          console.error("Error in recommendations process:", err)
-          toast({
-            title: "Error",
-            description: "Failed to process recommendations. Using fallback tracks instead.",
-            variant: "destructive",
-          })
-          tracks = getFallbackTracks(trackCount)
+        } catch (recError) {
+          console.error("Error getting recommendations:", recError)
+          setError("Failed to get track recommendations from Spotify. Please try again later.")
+          setIsLoading(false)
+          return
         }
       }
 
       if (tracks.length === 0) {
-        console.warn("No tracks found, using fallback tracks")
-        tracks = getFallbackTracks(trackCount)
+        setError("No tracks found. Please try different settings.")
+        setIsLoading(false)
+        return
       }
 
       // Determine image URL

@@ -308,9 +308,12 @@ export async function getRecommendations(accessToken: string, params: any) {
 
     console.log("Getting recommendations with params:", Object.fromEntries(queryParams.entries()))
 
+    // Make a direct fetch request to the Spotify API
     const response = await fetch(`https://api.spotify.com/v1/recommendations?${queryParams.toString()}`, {
+      method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
       },
     })
 
