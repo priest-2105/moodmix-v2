@@ -152,3 +152,25 @@ export async function getUserMoods(userId: string) {
   return data
 }
 
+export async function deleteMood(moodId: string) {
+  const supabase = createClient(supabaseUrl, supabaseKey)
+
+  // First delete all tracks associated with this mood
+  const { error: tracksError } = await supabase.from("mood_tracks").delete().eq("mood_id", moodId)
+
+  if (tracksError) {
+    console.error("Error deleting mood tracks:", tracksError)
+    throw tracksError
+  }
+
+  // Then delete the mood itself
+  const { error: moodError } = await supabase.from("moods").delete().eq("id", moodId)
+
+  if (moodError) {
+    console.error("Error deleting mood:", moodError)
+    throw moodError
+  }
+
+  return { success: true }
+}
+

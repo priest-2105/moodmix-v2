@@ -1,26 +1,39 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Play, Pause, Clock, Heart, MoreHorizontal } from "lucide-react"
+import { Play, Pause, Clock, Heart, MoreHorizontal, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
-import { getMoodTracks } from "@/lib/supabase/moods"
+import { getMoodTracks, deleteMood } from "@/lib/supabase/moods"
 import { formatDuration } from "@/lib/spotify-client"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface MoodViewProps {
   mood: any
   accessToken: string | null
   onTrackPlay: (track: any) => void
+  onMoodDelete?: (moodId: string) => void // Add this line
 }
 
-export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewProps) {
+export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete }: MoodViewProps) {
   const [tracks, setTracks] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [currentTrackIndex, setCurrentTrackIndex] = useState<number | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [dominantColor, setDominantColor] = useState("rgba(128, 128, 128, 0.7)")
   const { toast } = useToast()
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
     const fetchTracks = async () => {
@@ -135,6 +148,32 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
     }
   }
 
+  const handleDeleteMood = async () => {
+    if (!mood?.id) return
+
+    setIsDeleting(true)
+    try {
+      await deleteMood(mood.id)
+      toast({
+        title: "Mood Deleted",
+        description: `"${mood.name}" has been deleted successfully.`,
+      })
+      if (onMoodDelete) {
+        onMoodDelete(mood.id)
+      }
+    } catch (error) {
+      console.error("Error deleting mood:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete mood. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+      setIsDeleteDialogOpen(false)
+    }
+  }
+
   const totalDuration = tracks.reduce((acc, track) => acc + (track.duration_ms || 0), 0)
   const totalDurationFormatted = formatDuration(totalDuration)
 
@@ -176,6 +215,15 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
         </Button>
         <Button variant="ghost" size="icon" className="text-white/70 hover:text-white">
           <Heart className="h-6 w-6" />
+        </Button>
+        <div className="flex-1"></div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="text-white/70 hover:text-red-400"
+          onClick={() => setIsDeleteDialogOpen(true)}
+        >
+          <Trash2 className="h-6 w-6" />
         </Button>
         <Button variant="ghost" size="icon" className="text-white/70 hover:text-white">
           <MoreHorizontal className="h-6 w-6" />
@@ -238,6 +286,55 @@ export default function MoodView({ mood, accessToken, onTrackPlay }: MoodViewPro
           )}
         </div>
       </ScrollArea>
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="bg-[#282828] text-white border-[#333]">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Mood</AlertDialogTitle>
+            <AlertDialogDescription className="text-white/70">
+              Are you sure you want to delete "{mood.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-transparent text-white border-white/20 hover:bg-white/10">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-500 text-white hover:bg-red-600"
+              onClick={handleDeleteMood}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

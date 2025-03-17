@@ -717,7 +717,22 @@ export default function Home() {
                 ) : showPlaylistView && selectedPlaylist ? (
                   <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : showMoodView && selectedMood ? (
-                  <MoodView mood={selectedMood} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                  <MoodView
+                    mood={selectedMood}
+                    accessToken={accessToken}
+                    onTrackPlay={handleTrackPlay}
+                    onMoodDelete={(moodId) => {
+                      // Remove the mood from the state
+                      setMoods((prevMoods) => prevMoods.filter((m) => m.id !== moodId))
+                      // Go back to home
+                      handleBackToHome()
+                      // Show toast notification
+                      toast({
+                        title: "Mood Deleted",
+                        description: "The mood has been successfully deleted.",
+                      })
+                    }}
+                  />
                 ) : isLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="flex flex-col items-center">
