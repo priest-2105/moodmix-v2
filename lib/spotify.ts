@@ -279,21 +279,168 @@ export async function getRecommendations(accessToken: string, params: any) {
       throw new Error("Access token is required")
     }
 
-    // Make sure we have valid seed values
-    if (!params.seed_genres && !params.seed_artists && !params.seed_tracks) {
-      console.error("Missing seed values for recommendations")
-      // Provide fallback seed genres if none are provided
-      params.seed_genres = "pop,rock,electronic,hip-hop,r-n-b"
-    }
+    // List of valid Spotify genre seeds
+    const validGenreSeeds = [
+      "acoustic",
+      "afrobeat",
+      "alt-rock",
+      "alternative",
+      "ambient",
+      "anime",
+      "black-metal",
+      "bluegrass",
+      "blues",
+      "bossanova",
+      "brazil",
+      "breakbeat",
+      "british",
+      "cantopop",
+      "chicago-house",
+      "children",
+      "chill",
+      "classical",
+      "club",
+      "comedy",
+      "country",
+      "dance",
+      "dancehall",
+      "death-metal",
+      "deep-house",
+      "detroit-techno",
+      "disco",
+      "disney",
+      "drum-and-bass",
+      "dub",
+      "dubstep",
+      "edm",
+      "electro",
+      "electronic",
+      "emo",
+      "folk",
+      "forro",
+      "french",
+      "funk",
+      "garage",
+      "german",
+      "gospel",
+      "goth",
+      "grindcore",
+      "groove",
+      "grunge",
+      "guitar",
+      "happy",
+      "hard-rock",
+      "hardcore",
+      "hardstyle",
+      "heavy-metal",
+      "hip-hop",
+      "holidays",
+      "honky-tonk",
+      "house",
+      "idm",
+      "indian",
+      "indie",
+      "indie-pop",
+      "industrial",
+      "iranian",
+      "j-dance",
+      "j-idol",
+      "j-pop",
+      "j-rock",
+      "jazz",
+      "k-pop",
+      "kids",
+      "latin",
+      "latino",
+      "malay",
+      "mandopop",
+      "metal",
+      "metal-misc",
+      "metalcore",
+      "minimal-techno",
+      "movies",
+      "mpb",
+      "new-age",
+      "new-release",
+      "opera",
+      "pagode",
+      "party",
+      "philippines-opm",
+      "piano",
+      "pop",
+      "pop-film",
+      "post-dubstep",
+      "power-pop",
+      "progressive-house",
+      "psych-rock",
+      "punk",
+      "punk-rock",
+      "r-n-b",
+      "rainy-day",
+      "reggae",
+      "reggaeton",
+      "road-trip",
+      "rock",
+      "rock-n-roll",
+      "rockabilly",
+      "romance",
+      "sad",
+      "salsa",
+      "samba",
+      "sertanejo",
+      "show-tunes",
+      "singer-songwriter",
+      "ska",
+      "sleep",
+      "songwriter",
+      "soul",
+      "soundtracks",
+      "spanish",
+      "study",
+      "summer",
+      "swedish",
+      "synth-pop",
+      "tango",
+      "techno",
+      "trance",
+      "trip-hop",
+      "turkish",
+      "work-out",
+      "world-music",
+    ]
 
-    // Ensure seed_genres is properly formatted (no spaces, lowercase)
+    // Clean up and validate seed_genres
     if (params.seed_genres) {
-      params.seed_genres = params.seed_genres.toLowerCase().replace(/\s+/g, "")
+      // Split the genres, filter out invalid ones, and take up to 5 (Spotify's limit)
+      const genreList = params.seed_genres
+        .toLowerCase()
+        .split(",")
+        .map((g: string) => g.trim())
+        .filter((g: string) => validGenreSeeds.includes(g))
+        .slice(0, 5)
+
+      // If we have valid genres, use them; otherwise use some popular defaults
+      if (genreList.length > 0) {
+        params.seed_genres = genreList.join(",")
+        console.log("Using validated seed genres:", params.seed_genres)
+      } else {
+        params.seed_genres = "pop,rock,electronic"
+        console.log("No valid genres found, using defaults:", params.seed_genres)
+      }
+    } else if (!params.seed_artists && !params.seed_tracks) {
+      // If no seeds at all, provide defaults
+      params.seed_genres = "pop,rock,electronic"
+      console.log("No seeds provided, using default genres")
     }
 
     // Ensure we're requesting a good number of tracks
     if (!params.limit || params.limit < 5) {
       params.limit = 20
+    }
+
+    // Add market parameter if not present
+    if (!params.market) {
+      params.market = "US"
     }
 
     const queryParams = new URLSearchParams()
@@ -308,7 +455,7 @@ export async function getRecommendations(accessToken: string, params: any) {
 
     console.log("Getting recommendations with params:", Object.fromEntries(queryParams.entries()))
 
-    // Make a direct fetch request to the Spotify API
+    // Make the request to the Spotify API
     const response = await fetch(`https://api.spotify.com/v1/recommendations?${queryParams.toString()}`, {
       method: "GET",
       headers: {
@@ -353,8 +500,6 @@ export async function getRecommendations(accessToken: string, params: any) {
     return data
   } catch (error) {
     console.error("Error in getRecommendations:", error)
-
-    // Instead of returning fallback tracks, throw the error to be handled by the caller
     throw error
   }
 }
@@ -384,6 +529,60 @@ export async function getRecentlyPlayedTracks(accessToken: string) {
     return response.json()
   } catch (error) {
     console.error("Error in getRecentlyPlayedTracks:", error)
+    throw error
+  }
+}
+
+export async function searchTracks(accessToken: string, query: string, limit = 20) {
+  try {
+    if (!accessToken) {
+      throw new Error("Access token is required")
+    }
+
+    // Encode the query properly
+    const encodedQuery = encodeURIComponent(query)
+
+    // Build the URL with parameters
+    const url = `https://api.spotify.com/v1/search?q=${encodedQuery}&type=track&limit=${limit}&market=US`
+
+    console.log("Searching tracks with query:", query)
+
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Search tracks error response:", errorText)
+      throw new Error(`Failed to search tracks: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    // Validate the response data
+    if (!data.tracks || !Array.isArray(data.tracks.items)) {
+      console.error("Invalid search response:", data)
+      throw new Error("Invalid search response from Spotify")
+    }
+
+    console.log("Search success, found tracks:", data.tracks.items.length)
+
+    // Log a sample track
+    if (data.tracks.items.length > 0) {
+      console.log("Sample search result track:", {
+        id: data.tracks.items[0].id,
+        name: data.tracks.items[0].name,
+        uri: data.tracks.items[0].uri,
+        artists: data.tracks.items[0].artists?.map((a: any) => a.name).join(", "),
+      })
+    }
+
+    return data.tracks.items
+  } catch (error) {
+    console.error("Error in searchTracks:", error)
     throw error
   }
 }

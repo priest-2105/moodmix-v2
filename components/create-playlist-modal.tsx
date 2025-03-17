@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Loader2, Upload } from "lucide-react"
 import { Slider } from "@/components/ui/slider"
-import { getRecommendations, getPlaylistTracks } from "@/lib/spotify"
+import { getRecommendations, getPlaylistTracks, searchTracks } from "@/lib/spotify"
 import { saveMood, saveMoodTracks } from "@/lib/supabase/moods"
 import type { Playlist } from "@/types/spotify"
 import { useToast } from "@/components/ui/use-toast"
@@ -189,45 +189,76 @@ export default function CreatePlaylistModal({
         try {
           console.log("Getting recommendations for mood:", selectedMood)
 
-          // Prepare parameters based on mood type
-          const moodParams = moodTypes.find((m) => m.id === selectedMood)?.params || {}
+          // Try to get recommendations first
+          let recommendationSuccess = false
 
-          // Add more parameters for better recommendations
-          const recommendationParams = {
-            seed_genres: getMoodGenres(selectedMood).join(","),
-            limit: Math.min(trackCount, 30), // Request the number of tracks the user wants, max 30
-            ...moodParams,
-            market: "US", // Add market parameter for better results
+          try {
+            // Prepare parameters based on mood type
+            const moodParams = moodTypes.find((m) => m.id === selectedMood)?.params || {}
+
+            // Add more parameters for better recommendations
+            const recommendationParams = {
+              seed_genres: getMoodGenres(selectedMood).join(","),
+              limit: Math.min(trackCount, 30), // Request the number of tracks the user wants, max 30
+              ...moodParams,
+              market: "US", // Add market parameter for better results
+            }
+
+            console.log("Recommendation parameters:", recommendationParams)
+
+            const recommendations = await getRecommendations(accessToken || "", recommendationParams)
+
+            if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
+              tracks = recommendations.tracks
+              console.log(`Got ${tracks.length} recommended tracks`)
+              recommendationSuccess = true
+            }
+          } catch (recError) {
+            console.error("Recommendations API failed, will try search API instead:", recError)
           }
 
-          console.log("Recommendation parameters:", recommendationParams)
+          // If recommendations failed, try search API as fallback
+          if (!recommendationSuccess) {
+            console.log("Using search API as fallback")
 
-          const recommendations = await getRecommendations(accessToken || "", recommendationParams)
+            // Build search query based on mood
+            const searchQuery = buildSearchQueryForMood(selectedMood)
+            console.log("Search query:", searchQuery)
 
-          if (recommendations && recommendations.tracks && recommendations.tracks.length > 0) {
-            tracks = recommendations.tracks
-            console.log(`Got ${tracks.length} recommended tracks`)
+            try {
+              const searchResults = await searchTracks(accessToken || "", searchQuery, trackCount)
 
-            // Log the first track to verify structure
-            if (tracks.length > 0) {
-              console.log("Sample recommended track:", {
-                id: tracks[0].id,
-                name: tracks[0].name,
-                uri: tracks[0].uri,
-                artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
-                album: tracks[0].album?.name,
-                albumImage: tracks[0].album?.images?.[0]?.url,
-              })
+              if (searchResults && searchResults.length > 0) {
+                tracks = searchResults
+                console.log(`Got ${tracks.length} tracks from search`)
+
+                // Log the first track to verify structure
+                if (tracks.length > 0) {
+                  console.log("Sample track from search:", {
+                    id: tracks[0].id,
+                    name: tracks[0].name,
+                    uri: tracks[0].uri,
+                    artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
+                    album: tracks[0].album?.name,
+                  })
+                }
+              } else {
+                throw new Error("No tracks found from search")
+              }
+            } catch (searchError) {
+              console.error("Search API also failed:", searchError)
+              throw new Error("Both recommendation and search APIs failed to find tracks")
             }
-          } else {
-            // Instead of using fallback tracks, show an error and stop the process
-            setError("No recommendations found. Please try different mood settings.")
+          }
+
+          if (tracks.length === 0) {
+            setError("No tracks found. Please try different mood settings.")
             setIsLoading(false)
             return
           }
-        } catch (recError) {
-          console.error("Error getting recommendations:", recError)
-          setError("Failed to get track recommendations from Spotify. Please try again later.")
+        } catch (error) {
+          console.error("Error getting tracks:", error)
+          setError("Failed to get tracks. Please try again later.")
           setIsLoading(false)
           return
         }
@@ -342,20 +373,38 @@ export default function CreatePlaylistModal({
     }
   }
 
+  // Function to build a search query based on mood
+  const buildSearchQueryForMood = (mood: string): string => {
+    switch (mood) {
+      case "happy":
+        return "genre:pop genre:dance mood:happy"
+      case "sad":
+        return "genre:indie genre:folk mood:sad"
+      case "energetic":
+        return "genre:edm genre:rock mood:energetic"
+      case "relaxed":
+        return "genre:ambient genre:chill mood:relaxed"
+      case "focused":
+        return "genre:classical genre:instrumental mood:focus"
+      default:
+        return "genre:pop"
+    }
+  }
+
   const getMoodGenres = (mood: string): string[] => {
     switch (mood) {
       case "happy":
-        return ["pop", "happy", "dance", "disco", "funk"]
+        return ["pop", "dance", "disco", "funk", "happy"]
       case "sad":
         return ["sad", "indie", "singer-songwriter", "piano", "folk"]
       case "energetic":
-        return ["edm", "rock", "workout", "electronic", "dance"]
+        return ["edm", "rock", "dance", "electronic", "work-out"]
       case "relaxed":
         return ["chill", "ambient", "sleep", "acoustic", "jazz"]
       case "focused":
-        return ["study", "classical", "instrumental", "ambient", "piano"]
+        return ["study", "classical", "piano", "ambient", "electronic"]
       default:
-        return ["pop"]
+        return ["pop", "rock", "electronic"]
     }
   }
 
