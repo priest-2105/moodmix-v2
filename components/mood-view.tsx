@@ -22,7 +22,7 @@ interface MoodViewProps {
   mood: any
   accessToken: string | null
   onTrackPlay: (track: any) => void
-  onMoodDelete?: (moodId: string) => void // Add this line
+  onMoodDelete?: (moodId: string) => void
 }
 
 export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete }: MoodViewProps) {
@@ -34,6 +34,19 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
   const { toast } = useToast()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+
+  // Add debugging for mood data
+  useEffect(() => {
+    if (mood) {
+      console.log("Mood data in MoodView:", {
+        id: mood.id,
+        name: mood.name,
+        mood_type: mood.mood_type,
+        image_url: mood.image_url,
+        description: mood.description,
+      })
+    }
+  }, [mood])
 
   useEffect(() => {
     const fetchTracks = async () => {
@@ -49,6 +62,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
             name: moodTracks[0].track_name,
             artist: moodTracks[0].artist_name,
             album: moodTracks[0].album_name,
+            duration_ms: moodTracks[0].duration_ms,
           })
         }
 
@@ -62,7 +76,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
             name: track.album_name || "Unknown Album",
             images: [{ url: track.album_image_url || "/placeholder.svg?height=200&width=200" }],
           },
-          duration_ms: 180000, // Default duration of 3 minutes
+          duration_ms: track.duration_ms || 180000, // Use actual duration from database or default
           added_at: track.added_at,
         }))
 

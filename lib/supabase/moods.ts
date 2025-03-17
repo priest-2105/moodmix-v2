@@ -14,6 +14,7 @@ interface MoodTrack {
   artist_name: string
   album_name: string | null
   album_image_url: string | null
+  duration_ms?: number // Add duration field
   added_at?: string // Optional because Supabase can handle the default
 }
 
@@ -67,6 +68,7 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
       artist_name: track.artist_name || "Unknown Artist",
       album_name: track.album_name || null,
       album_image_url: track.album_image_url || null,
+      duration_ms: track.duration_ms || 180000, // Use the actual duration or default to 3 minutes
       // Let Supabase handle the added_at timestamp with its default value
     }
   })
@@ -164,13 +166,13 @@ export async function deleteMood(moodId: string) {
   }
 
   // Then delete the mood itself
-  const { error: moodError } = await supabase.from("moods").delete().eq("id", moodId)
+  const { error } = await supabase.from("moods").delete().eq("id", moodId)
 
-  if (moodError) {
-    console.error("Error deleting mood:", moodError)
-    throw moodError
+  if (error) {
+    console.error("Error deleting mood:", error)
+    throw error
   }
 
-  return { success: true }
+  return true
 }
 

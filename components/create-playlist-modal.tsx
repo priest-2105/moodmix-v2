@@ -171,6 +171,7 @@ export default function CreatePlaylistModal({
                 name: tracks[0].name,
                 artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
                 album: tracks[0].album?.name,
+                duration_ms: tracks[0].duration_ms,
               })
             }
           } else {
@@ -240,6 +241,7 @@ export default function CreatePlaylistModal({
                     uri: tracks[0].uri,
                     artists: tracks[0].artists?.map((a: any) => a.name).join(", "),
                     album: tracks[0].album?.name,
+                    duration_ms: tracks[0].duration_ms,
                   })
                 }
               } else {
@@ -306,6 +308,7 @@ export default function CreatePlaylistModal({
               id: track.id,
               name: track.name,
               uri: track.uri,
+              duration_ms: track.duration_ms,
             })
           }
 
@@ -316,6 +319,7 @@ export default function CreatePlaylistModal({
             artist_name: track.artists ? track.artists.map((a: any) => a.name).join(", ") : "Unknown Artist",
             album_name: track.album?.name || null,
             album_image_url: track.album?.images?.[0]?.url || null,
+            duration_ms: track.duration_ms || 180000, // Store the actual duration or default to 3 minutes
           }
         })
 
