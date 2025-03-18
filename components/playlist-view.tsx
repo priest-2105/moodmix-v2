@@ -164,7 +164,8 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
   const handlePrevious = () => {
     if (!playerReady || tracks.length === 0) return
 
-    const prevIndex = currentTrackIndex !== null ? (currentTrackIndex - 1 + tracks.length) % tracks.length : 0
+    const prevIndex =
+      currentTrackIndex !== null ? (currentTrackIndex - 1 + tracks.length) % tracks.length : tracks.length - 1
 
     setCurrentTrackIndex(prevIndex)
     setIsPlaying(true)
@@ -358,7 +359,7 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
             onPlayPause={() => setIsPlaying(!isPlaying)}
             onNext={handleNext}
             onPrevious={handlePrevious}
-            playerState={playerState}  
+            playerState={playerState} // Pass the player state to the music player
           />
         </div>
       )}

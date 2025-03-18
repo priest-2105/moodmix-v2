@@ -35,6 +35,7 @@ export default function SpotifyWebPlayer({
   const [lastStateUpdate, setLastStateUpdate] = useState<number>(0)
   const pendingPlayRequest = useRef<{ uri: string; play: boolean } | null>(null)
   const { toast } = useToast()
+  const playerState = useRef<any>(null)
 
   // Load Spotify Web Playback SDK script
   useEffect(() => {
@@ -168,7 +169,21 @@ export default function SpotifyWebPlayer({
             timestamp: now,
           }
 
-          onPlayerStateChanged(enhancedState)
+          // Only update the player state if it's a significant change
+          // This helps prevent unexpected pauses
+          const isSignificantChange =
+            !playerState.current ||
+            playerState.current?.track_window?.current_track?.uri !== state.track_window?.current_track?.uri ||
+            Math.abs(playerState.current?.position - state.position) > 3000 // More than 3 seconds difference
+
+          if (isSignificantChange) {
+            onPlayerStateChanged(enhancedState)
+            playerState.current = state
+          } else if (playerState.current?.paused !== state.paused) {
+            // Always update if play/pause state changes
+            onPlayerStateChanged(enhancedState)
+            playerState.current = state
+          }
         }
       })
 
@@ -249,6 +264,7 @@ export default function SpotifyWebPlayer({
             },
             body: JSON.stringify({
               uris: [uri],
+              position_ms: 0, // Start from the beginning
             }),
           })
 
@@ -257,6 +273,16 @@ export default function SpotifyWebPlayer({
             console.error("Playback error response:", response.status, errorText)
             throw new Error(`Failed to play track: ${response.status} ${response.statusText}`)
           }
+
+          // After starting a new track, make sure we're not paused
+          setTimeout(() => {
+            playerInstance.resume().catch((err: any) => {
+              console.error("Error ensuring playback:", err)
+            })
+          }, 500)
+        } else if (isCurrentTrack && !state.paused) {
+          // Track is already playing, do nothing
+          console.log("Track is already playing")
         }
       } else {
         console.log("Pausing playback")
@@ -326,7 +352,7 @@ export default function SpotifyWebPlayer({
     )
   }
 
-  return null 
+  return null // This component doesn't render anything visible
 }
 
 // Helper function to convert track object to Spotify URI

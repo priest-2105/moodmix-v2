@@ -17,6 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import MusicPlayer from "@/components/music-player"
 
 interface MoodViewProps {
   mood: any
@@ -34,6 +35,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
   const { toast } = useToast()
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [currentTrack, setCurrentTrack] = useState<any>(null)
 
   // Add debugging for mood data
   useEffect(() => {
@@ -122,6 +124,29 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
     setDominantColor(moodTypeColors[mood.mood_type] || moodTypeColors.default)
   }
 
+  const handleNext = () => {
+    if (tracks.length === 0) return
+
+    const nextIndex = currentTrackIndex !== null ? (currentTrackIndex + 1) % tracks.length : 0
+
+    setCurrentTrackIndex(nextIndex)
+    setIsPlaying(true)
+    onTrackPlay(tracks[nextIndex])
+    setCurrentTrack(tracks[nextIndex])
+  }
+
+  const handlePrevious = () => {
+    if (tracks.length === 0) return
+
+    const prevIndex =
+      currentTrackIndex !== null ? (currentTrackIndex - 1 + tracks.length) % tracks.length : tracks.length - 1
+
+    setCurrentTrackIndex(prevIndex)
+    setIsPlaying(true)
+    onTrackPlay(tracks[prevIndex])
+    setCurrentTrack(tracks[prevIndex])
+  }
+
   const handlePlay = (index: number) => {
     if (currentTrackIndex === index && isPlaying) {
       setIsPlaying(false)
@@ -148,6 +173,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
       }
 
       onTrackPlay(tracks[index])
+      setCurrentTrack(tracks[index])
     }
   }
 
@@ -159,6 +185,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
         setCurrentTrackIndex(0)
         setIsPlaying(true)
         onTrackPlay(tracks[0])
+        setCurrentTrack(tracks[0])
       }
     }
   }
@@ -349,6 +376,22 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Music Player at the bottom */}
+      {currentTrack && (
+        <div className="fixed bottom-0 left-0 right-0 h-20 bg-[#282828] border-t border-white/10">
+          <MusicPlayer
+            playlistId={mood.id}
+            accessToken={accessToken}
+            onTrackPlay={onTrackPlay}
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            onPlayPause={() => setIsPlaying(!isPlaying)}
+            onNext={handleNext}
+            onPrevious={handlePrevious}
+            playerState={null}
+          />
+        </div>
+      )}
     </div>
   )
 }

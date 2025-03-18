@@ -263,16 +263,36 @@ export default function Home() {
   }
 
   const handleNext = useCallback(() => {
-    // This would be implemented with the actual Spotify SDK
-    // For now, we'll just toggle the play state
-    console.log("Next track")
-  }, [])
+    if (selectedPlaylist && showPlaylistView) {
+      // Let the PlaylistView component handle next
+      return
+    } else if (selectedMood && showMoodView) {
+      // Let the MoodView component handle next
+      return
+    } else if (currentlyPlaying) {
+      // If we're on the home page but a track is playing, we can't navigate
+      toast({
+        title: "Navigation limited",
+        description: "Next track navigation is only available in playlist or mood view.",
+      })
+    }
+  }, [selectedPlaylist, showPlaylistView, selectedMood, showMoodView, currentlyPlaying])
 
   const handlePrevious = useCallback(() => {
-    // This would be implemented with the actual Spotify SDK
-    // For now, we'll just toggle the play state
-    console.log("Previous track")
-  }, [])
+    if (selectedPlaylist && showPlaylistView) {
+      // Let the PlaylistView component handle previous
+      return
+    } else if (selectedMood && showMoodView) {
+      // Let the MoodView component handle previous
+      return
+    } else if (currentlyPlaying) {
+      // If we're on the home page but a track is playing, we can't navigate
+      toast({
+        title: "Navigation limited",
+        description: "Previous track navigation is only available in playlist or mood view.",
+      })
+    }
+  }, [selectedPlaylist, showPlaylistView, selectedMood, showMoodView, currentlyPlaying])
 
   const handleLogout = () => {
     localStorage.removeItem("spotify_access_token")
@@ -303,11 +323,37 @@ export default function Home() {
       setPlayerState(state)
 
       // Sync the UI play state with the actual Spotify player state
+      // Only update if there's a mismatch to avoid loops
       if (state && state.paused !== undefined && isPlaying === state.paused) {
+        console.log("Syncing play state from Spotify:", !state.paused)
         setIsPlaying(!state.paused)
       }
+
+      // If we're in a playlist or mood view, let those components handle the state
+      // This prevents unexpected pauses when navigating between tracks
+      if (showPlaylistView || showMoodView) {
+        return
+      }
+
+      // If we're on the home page, update the currently playing track if needed
+      if (state && state.track_window && state.track_window.current_track) {
+        const spotifyTrack = state.track_window.current_track
+
+        // Only update if it's a different track
+        if (!currentlyPlaying || currentlyPlaying.uri !== spotifyTrack.uri) {
+          const formattedTrack = {
+            id: spotifyTrack.id,
+            uri: spotifyTrack.uri,
+            name: spotifyTrack.name,
+            artists: spotifyTrack.artists,
+            album: spotifyTrack.album,
+            duration_ms: state.duration,
+          }
+          setCurrentlyPlaying(formattedTrack)
+        }
+      }
     },
-    [isPlaying],
+    [isPlaying, showPlaylistView, showMoodView, currentlyPlaying],
   )
 
   // Function to load recent artists, albums, and podcasts
