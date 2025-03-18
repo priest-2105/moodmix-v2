@@ -8,7 +8,7 @@ interface SpotifyWebPlayerProps {
   accessToken: string | null
   currentTrackUri: string | null
   isPlaying: boolean
-  onPlayerStateChanged: (state: any) => void
+  onPlayerStateChanged: (state: any, playerInstance: any) => void
   onPlayerReady: () => void
   onError: (error: string) => void
 }
@@ -20,6 +20,7 @@ declare global {
   }
 }
 
+// Update the component to return the player instance and methods
 export default function SpotifyWebPlayer({
   accessToken,
   currentTrackUri,
@@ -128,6 +129,11 @@ export default function SpotifyWebPlayer({
             setIsPlayerReady(true)
             onPlayerReady()
 
+            // Set initial volume
+            spotifyPlayer.getVolume().then((volume: number) => {
+              console.log(`Initial player volume: ${Math.round(volume * 100)}%`)
+            })
+
             // Process any pending play request
             if (pendingPlayRequest.current) {
               console.log("Processing pending play request:", pendingPlayRequest.current)
@@ -149,7 +155,7 @@ export default function SpotifyWebPlayer({
         setIsPlayerReady(false)
       })
 
-      // Player State Changed
+      // Update the player state changed listener to pass the player instance
       spotifyPlayer.addListener("player_state_changed", (state: any) => {
         if (!state) {
           console.log("No player state available")
@@ -186,8 +192,18 @@ export default function SpotifyWebPlayer({
           // Always update the player state reference
           playerState.current = state
 
-          // Always notify about state changes
-          onPlayerStateChanged(enhancedState)
+          // Always notify about state changes and pass the player instance
+          onPlayerStateChanged(enhancedState, {
+            player: player,
+            deviceId: deviceId,
+            setVolume: (volumePercent: number) => {
+              if (player) {
+                player.setVolume(volumePercent / 100).catch((err: any) => {
+                  console.error("Error setting volume:", err)
+                })
+              }
+            },
+          })
         }
       })
 
@@ -307,7 +323,22 @@ export default function SpotifyWebPlayer({
         if (isCurrentTrack && state.paused) {
           // If it's the same track but paused, just resume
           console.log("Resuming current track")
-          await playerInstance.resume()
+
+          // Try both methods for better reliability
+          try {
+            await playerInstance.resume()
+
+            // Also try the API
+            await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+              },
+            })
+          } catch (err) {
+            console.error("Error resuming playback:", err)
+          }
         } else if (!isCurrentTrack) {
           // If it's a different track, play it
           console.log("Playing new track via API")
@@ -356,7 +387,22 @@ export default function SpotifyWebPlayer({
       } else {
         // Should pause
         console.log("Pausing playback")
-        await playerInstance.pause()
+
+        // Try both methods for better reliability
+        try {
+          await playerInstance.pause()
+
+          // Also try the API
+          await fetch(`https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`, {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          })
+        } catch (err) {
+          console.error("Error pausing playback:", err)
+        }
       }
     } catch (error) {
       console.error("Error in playTrack:", error)
@@ -405,13 +451,23 @@ export default function SpotifyWebPlayer({
     const pollInterval = setInterval(() => {
       player.getCurrentState().then((state: any) => {
         if (state) {
-          onPlayerStateChanged(state)
+          onPlayerStateChanged(state, {
+            player: player,
+            deviceId: deviceId,
+            setVolume: (volumePercent: number) => {
+              if (player) {
+                player.setVolume(volumePercent / 100).catch((err: any) => {
+                  console.error("Error setting volume:", err)
+                })
+              }
+            },
+          })
         }
       })
     }, 500) // Poll every 500ms for more accurate updates
 
     return () => clearInterval(pollInterval)
-  }, [player, onPlayerStateChanged, isPlayerReady])
+  }, [player, onPlayerStateChanged, isPlayerReady, deviceId])
 
   if (isInitializing) {
     return (

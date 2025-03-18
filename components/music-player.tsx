@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Slider } from "@/components/ui/slider"
 import { Play, Pause, SkipForward, SkipBack, Volume2, Volume1, VolumeX } from "lucide-react"
@@ -17,6 +17,7 @@ interface MusicPlayerProps {
   onNext: () => void
   onPrevious: () => void
   playerState?: any
+  onVolumeChange?: (volume: number) => void
 }
 
 export default function MusicPlayer({
@@ -29,6 +30,7 @@ export default function MusicPlayer({
   onNext,
   onPrevious,
   playerState,
+  onVolumeChange,
 }: MusicPlayerProps) {
   const [volume, setVolume] = useState(0.7)
   const [progress, setProgress] = useState(0)
@@ -135,6 +137,11 @@ export default function MusicPlayer({
     const newVolume = value[0]
     setVolume(newVolume)
 
+    // Call the parent handler if provided
+    if (onVolumeChange) {
+      onVolumeChange(Math.round(newVolume * 100))
+    }
+
     // Update Spotify player volume if we have access token
     if (accessToken) {
       try {
@@ -214,6 +221,43 @@ export default function MusicPlayer({
     }
   }, [playerState, isPlaying, onPlayPause])
 
+  // Add this function to directly control playback
+  const handlePlayPauseAction = useCallback(() => {
+    if (!accessToken || !playerState?.device?.id) {
+      console.warn("Cannot control playback: missing token or device ID")
+      onPlayPause() // Still toggle the UI state
+      return
+    }
+
+    const endpoint = isPlaying
+      ? `https://api.spotify.com/v1/me/player/pause?device_id=${playerState.device.id}`
+      : `https://api.spotify.com/v1/me/player/play?device_id=${playerState.device.id}`
+
+    fetch(endpoint, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    })
+      .then((response) => {
+        if (!response.ok && response.status !== 204) {
+          return response.text().then((text) => {
+            throw new Error(`Failed to ${isPlaying ? "pause" : "play"}: ${response.status} ${text}`)
+          })
+        }
+        onPlayPause() // Toggle the UI state after successful API call
+      })
+      .catch((error) => {
+        console.error("Playback control error:", error)
+        toast({
+          title: "Playback Error",
+          description: error.message,
+          variant: "destructive",
+        })
+      })
+  }, [accessToken, isPlaying, onPlayPause, playerState?.device?.id, toast])
+
   if (!currentTrack) return null
 
   return (
@@ -242,7 +286,7 @@ export default function MusicPlayer({
 
           <Button
             size="icon"
-            onClick={onPlayPause}
+            onClick={handlePlayPauseAction}
             className="bg-white text-black hover:bg-white/80 h-8 w-8 rounded-full"
           >
             {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}

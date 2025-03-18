@@ -24,6 +24,7 @@ import SearchBar from "@/components/search-bar"
 import SearchResults from "@/components/search-results"
 import { toast } from "@/components/ui/use-toast"
 import { getUserMoods } from "@/lib/supabase/moods"
+import SpotifyWebPlayer from "@/components/spotify-web-player"
 
 // Dummy data for mood types
 const moodTypes = [
@@ -96,6 +97,9 @@ export default function Home() {
 
   // Add a state for player state
   const [playerState, setPlayerState] = useState<any>(null)
+
+  // Add a ref to access the SpotifyWebPlayer methods
+  const spotifyPlayerRef = useRef<any>(null)
 
   // Handle authentication flow
   useEffect(() => {
@@ -258,9 +262,74 @@ export default function Home() {
     setIsPlaying(true)
   }
 
-  const handlePlayPause = () => {
+  // Update the handlePlayerStateChange function to store the player reference
+  const handlePlayerStateChange = useCallback(
+    (state: any, playerInstance: any) => {
+      setPlayerState(state)
+
+      // Store the player instance reference if provided
+      if (playerInstance && spotifyPlayerRef.current !== playerInstance) {
+        spotifyPlayerRef.current = playerInstance
+      }
+
+      // Sync the UI play state with the actual Spotify player state
+      // Only update if there's a mismatch to avoid loops
+      if (state && state.paused !== undefined && isPlaying !== !state.paused) {
+        console.log("Syncing play state from Spotify:", !state.paused)
+        setIsPlaying(!state.paused)
+      }
+
+      // If we're in a playlist or mood view, let those components handle the state
+      // This prevents unexpected pauses when navigating between tracks
+      if (showPlaylistView || showMoodView) {
+        return
+      }
+
+      // If we're on the home page, update the currently playing track if needed
+      if (state && state.track_window && state.track_window.current_track) {
+        const spotifyTrack = state.track_window.current_track
+
+        // Only update if it's a different track
+        if (!currentlyPlaying || currentlyPlaying.uri !== spotifyTrack.uri) {
+          const formattedTrack = {
+            id: spotifyTrack.id,
+            uri: spotifyTrack.uri,
+            name: spotifyTrack.name,
+            artists: spotifyTrack.artists,
+            album: spotifyTrack.album,
+            duration_ms: state.duration,
+          }
+          setCurrentlyPlaying(formattedTrack)
+        }
+      }
+    },
+    [isPlaying, showPlaylistView, showMoodView, currentlyPlaying],
+  )
+
+  // Update the handlePlayPause function to use the player reference
+  const handlePlayPause = useCallback(() => {
     setIsPlaying(!isPlaying)
-  }
+
+    // If we have a player reference, use it to control playback
+    if (spotifyPlayerRef.current && spotifyPlayerRef.current.player) {
+      try {
+        if (isPlaying) {
+          spotifyPlayerRef.current.player.pause()
+        } else {
+          spotifyPlayerRef.current.player.resume()
+        }
+      } catch (error) {
+        console.error("Error controlling playback:", error)
+      }
+    }
+  }, [isPlaying])
+
+  // Add a function to handle volume changes
+  const handleVolumeChange = useCallback((volume: number) => {
+    if (spotifyPlayerRef.current && spotifyPlayerRef.current.setVolume) {
+      spotifyPlayerRef.current.setVolume(volume)
+    }
+  }, [])
 
   const handleNext = useCallback(() => {
     if (selectedPlaylist && showPlaylistView) {
@@ -316,45 +385,6 @@ export default function Home() {
       setIsLoginModalOpen(false)
     }
   }
-
-  // Add a function to handle player state changes
-  const handlePlayerStateChange = useCallback(
-    (state: any) => {
-      setPlayerState(state)
-
-      // Sync the UI play state with the actual Spotify player state
-      // Only update if there's a mismatch to avoid loops
-      if (state && state.paused !== undefined && isPlaying !== !state.paused) {
-        console.log("Syncing play state from Spotify:", !state.paused)
-        setIsPlaying(!state.paused)
-      }
-
-      // If we're in a playlist or mood view, let those components handle the state
-      // This prevents unexpected pauses when navigating between tracks
-      if (showPlaylistView || showMoodView) {
-        return
-      }
-
-      // If we're on the home page, update the currently playing track if needed
-      if (state && state.track_window && state.track_window.current_track) {
-        const spotifyTrack = state.track_window.current_track
-
-        // Only update if it's a different track
-        if (!currentlyPlaying || currentlyPlaying.uri !== spotifyTrack.uri) {
-          const formattedTrack = {
-            id: spotifyTrack.id,
-            uri: spotifyTrack.uri,
-            name: spotifyTrack.name,
-            artists: spotifyTrack.artists,
-            album: spotifyTrack.album,
-            duration_ms: state.duration,
-          }
-          setCurrentlyPlaying(formattedTrack)
-        }
-      }
-    },
-    [isPlaying, showPlaylistView, showMoodView, currentlyPlaying],
-  )
 
   // Function to load recent artists, albums, and podcasts
   const loadRecentContent = async (type: "artists" | "albums" | "podcasts") => {
@@ -769,9 +799,47 @@ export default function Home() {
                     selectedPlaylistId={selectedPlaylist?.id}
                   />
                 ) : showPlaylistView && selectedPlaylist ? (
-                  <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                  <>
+                    <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                    {accessToken && (
+                      <SpotifyWebPlayer
+                        accessToken={accessToken}
+                        currentTrackUri={currentlyPlaying?.uri}
+                        isPlaying={isPlaying}
+                        onPlayerStateChanged={(state, player) => handlePlayerStateChange(state, player)}
+                        onPlayerReady={() => console.log("Player ready in PlaylistView")}
+                        onError={(error) => {
+                          console.error("Player error in PlaylistView:", error)
+                          toast({
+                            title: "Player Error",
+                            description: error,
+                            variant: "destructive",
+                          })
+                        }}
+                      />
+                    )}
+                  </>
                 ) : showMoodView && selectedMood ? (
-                  <MoodView mood={selectedMood} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                  <>
+                    <MoodView mood={selectedMood} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
+                    {accessToken && (
+                      <SpotifyWebPlayer
+                        accessToken={accessToken}
+                        currentTrackUri={currentlyPlaying?.uri}
+                        isPlaying={isPlaying}
+                        onPlayerStateChanged={(state, player) => handlePlayerStateChange(state, player)}
+                        onPlayerReady={() => console.log("Player ready in MoodView")}
+                        onError={(error) => {
+                          console.error("Player error in MoodView:", error)
+                          toast({
+                            title: "Player Error",
+                            description: error,
+                            variant: "destructive",
+                          })
+                        }}
+                      />
+                    )}
+                  </>
                 ) : isLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="flex flex-col items-center">
@@ -929,6 +997,7 @@ export default function Home() {
             onNext={handleNext}
             onPrevious={handlePrevious}
             playerState={playerState}
+            onVolumeChange={handleVolumeChange}
           />
         </div>
       )}
