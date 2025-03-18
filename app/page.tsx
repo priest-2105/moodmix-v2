@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Plus, ChevronLeft, ChevronRight, Loader2, Play } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, Loader2, Play, Menu } from "lucide-react"
 import { getSpotifyToken, getUserProfile, getUserPlaylists, getRecentlyPlayedTracks } from "@/lib/spotify"
 import { Toaster } from "@/components/ui/toaster"
 import LoginModal from "@/components/login-modal"
@@ -25,6 +25,7 @@ import SearchResults from "@/components/search-results"
 import { toast } from "@/components/ui/use-toast"
 import { getUserMoods } from "@/lib/supabase/moods"
 import SpotifyWebPlayer from "@/components/spotify-web-player"
+import { useMobile } from "@/hooks/use-mobile"
 
 // Dummy data for mood types
 const moodTypes = [
@@ -45,6 +46,7 @@ export default function Home() {
   const searchParams = useSearchParams()
   const code = searchParams.get("code")
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const isMobile = useMobile(1024) // Use 1024px as breakpoint for tablets
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const [isCreatePlaylistModalOpen, setIsCreatePlaylistModalOpen] = useState(false)
@@ -62,6 +64,7 @@ export default function Home() {
   const [showMoodView, setShowMoodView] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [isSearching, setIsSearching] = useState(false)
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   // Modal states
   const [isMoodsModalOpen, setIsMoodsModalOpen] = useState(false)
@@ -100,6 +103,11 @@ export default function Home() {
 
   // Add a ref to access the SpotifyWebPlayer methods
   const spotifyPlayerRef = useRef<any>(null)
+
+  // Toggle sidebar function
+  const toggleSidebar = useCallback(() => {
+    setIsSidebarOpen((prev) => !prev)
+  }, [])
 
   // Handle authentication flow
   useEffect(() => {
@@ -392,189 +400,207 @@ export default function Home() {
 
     setIsLoadingContent(true)
     try {
-      // Try to get recently played tracks, but handle errors gracefully
-      let recentlyPlayed
-      try {
-        recentlyPlayed = await getRecentlyPlayedTracks(accessToken)
-      } catch (error) {
-        console.error(`Error loading ${type}:`, error)
-        // Continue with fallback data
-        recentlyPlayed = { items: [] }
-      }
-
       if (type === "artists") {
-        // If we have recently played tracks, extract artists
-        if (recentlyPlayed.items && recentlyPlayed.items.length > 0) {
-          const uniqueArtists = Array.from(
-            new Map(
-              recentlyPlayed.items
-                .flatMap((item) => item.track.artists)
-                .map((artist) => [
-                  artist.id,
-                  {
-                    id: artist.id,
-                    name: artist.name,
-                    imageUrl: "/placeholder.svg?height=200&width=200",
-                    type: "artist",
-                  },
-                ]),
-            ).values(),
-          )
-          setArtists(uniqueArtists.slice(0, 10))
+        // Fetch user's top artists
+        const response = await fetch("https://api.spotify.com/v1/me/top/artists?limit=20&time_range=short_term", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch top artists: ${response.status}`)
+        }
+
+        const data = await response.json()
+
+        if (data.items && data.items.length > 0) {
+          const artistItems = data.items.map((artist: any) => ({
+            id: artist.id,
+            name: artist.name,
+            imageUrl: artist.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+            description: `${artist.followers?.total?.toLocaleString() || "0"} followers`,
+            type: "artist",
+          }))
+
+          setArtists(artistItems)
+          console.log(`Loaded ${artistItems.length} artists from Spotify`)
         } else {
-          // Fallback: Provide sample artists
-          setArtists([
-            {
-              id: "sample-1",
-              name: "The Weeknd",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              type: "artist",
-            },
-            {
-              id: "sample-2",
-              name: "Dua Lipa",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              type: "artist",
-            },
-            {
-              id: "sample-3",
-              name: "Billie Eilish",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              type: "artist",
-            },
-            {
-              id: "sample-4",
-              name: "Drake",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              type: "artist",
-            },
-          ])
+          // Fallback to recently played tracks if no top artists
+          const recentlyPlayed = await getRecentlyPlayedTracks(accessToken)
+
+          if (recentlyPlayed.items && recentlyPlayed.items.length > 0) {
+            const uniqueArtists = Array.from(
+              new Map(
+                recentlyPlayed.items
+                  .flatMap((item: any) => item.track.artists)
+                  .map((artist: any) => [
+                    artist.id,
+                    {
+                      id: artist.id,
+                      name: artist.name,
+                      imageUrl: "/placeholder.svg?height=200&width=200", // Spotify doesn't provide artist images in this endpoint
+                      type: "artist",
+                    },
+                  ]),
+              ).values(),
+            )
+            setArtists(uniqueArtists.slice(0, 10))
+          } else {
+            throw new Error("No artists found")
+          }
         }
       } else if (type === "albums") {
-        // If we have recently played tracks, extract albums
+        // First try to get user's saved albums
+        const savedAlbumsResponse = await fetch("https://api.spotify.com/v1/me/albums?limit=20", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        })
+
+        if (savedAlbumsResponse.ok) {
+          const savedAlbumsData = await savedAlbumsResponse.json()
+
+          if (savedAlbumsData.items && savedAlbumsData.items.length > 0) {
+            const albumItems = savedAlbumsData.items.map((item: any) => ({
+              id: item.album.id,
+              name: item.album.name,
+              imageUrl: item.album.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+              description: item.album.artists.map((a: any) => a.name).join(", "),
+              type: "album",
+            }))
+
+            setAlbums(albumItems)
+            console.log(`Loaded ${albumItems.length} saved albums from Spotify`)
+            return
+          }
+        }
+
+        // Fallback to recently played tracks if no saved albums
+        const recentlyPlayed = await getRecentlyPlayedTracks(accessToken)
+
         if (recentlyPlayed.items && recentlyPlayed.items.length > 0) {
           const uniqueAlbums = Array.from(
             new Map(
-              recentlyPlayed.items.map((item) => [
+              recentlyPlayed.items.map((item: any) => [
                 item.track.album.id,
                 {
                   id: item.track.album.id,
                   name: item.track.album.name,
                   imageUrl: item.track.album.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
-                  description: item.track.artists.map((a) => a.name).join(", "),
+                  description: item.track.artists.map((a: any) => a.name).join(", "),
                   type: "album",
                 },
               ]),
             ).values(),
           )
-          setAlbums(uniqueAlbums.slice(0, 10))
+
+          setAlbums(uniqueAlbums)
+          console.log(`Loaded ${uniqueAlbums.length} albums from recently played tracks`)
         } else {
-          // Fallback: Provide sample albums
-          setAlbums([
-            {
-              id: "sample-album-1",
-              name: "After Hours",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              description: "The Weeknd",
-              type: "album",
-            },
-            {
-              id: "sample-album-2",
-              name: "Future Nostalgia",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              description: "Dua Lipa",
-              type: "album",
-            },
-            {
-              id: "sample-album-3",
-              name: "Happier Than Ever",
-              imageUrl: "/placeholder.svg?height=200&width=200",
-              description: "Billie Eilish",
-              type: "album",
-            },
-          ])
+          throw new Error("No albums found")
         }
       } else if (type === "podcasts") {
-        // For podcasts, we'll use placeholder data
-        setPodcasts([
-          {
-            id: "podcast-1",
-            name: "Music Decoded",
-            imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "Exploring the science behind your favorite songs",
-            type: "podcast",
+        // Fetch user's saved shows (podcasts)
+        const response = await fetch("https://api.spotify.com/v1/me/shows?limit=20", {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
           },
-          {
-            id: "podcast-2",
-            name: "Artist Interviews",
-            imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "Conversations with top musicians",
+        })
+
+        if (!response.ok) {
+          // If we get a 403, it might be a permissions issue
+          if (response.status === 403) {
+            throw new Error(
+              "You may need to re-authenticate with the 'user-library-read' scope to access your podcasts",
+            )
+          }
+          throw new Error(`Failed to fetch podcasts: ${response.status}`)
+        }
+
+        const data = await response.json()
+
+        if (data.items && data.items.length > 0) {
+          const podcastItems = data.items.map((item: any) => ({
+            id: item.show.id,
+            name: item.show.name,
+            imageUrl: item.show.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+            description: item.show.publisher || item.show.description?.substring(0, 50) + "..." || "",
             type: "podcast",
-          },
-          {
-            id: "podcast-3",
-            name: "Music History",
-            imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "The evolution of modern music",
-            type: "podcast",
-          },
-        ])
+          }))
+
+          setPodcasts(podcastItems)
+          console.log(`Loaded ${podcastItems.length} podcasts from Spotify`)
+        } else {
+          // Try to get featured podcasts if user has no saved shows
+          const featuredResponse = await fetch("https://api.spotify.com/v1/browse/featured-playlists?limit=10", {
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+            },
+          })
+
+          if (featuredResponse.ok) {
+            const featuredData = await featuredResponse.json()
+
+            if (featuredData.playlists?.items && featuredData.playlists.items.length > 0) {
+              // Use featured playlists as a fallback
+              const featuredItems = featuredData.playlists.items
+                .filter((item: any) => item.description.toLowerCase().includes("podcast"))
+                .map((item: any) => ({
+                  id: item.id,
+                  name: item.name,
+                  imageUrl: item.images?.[0]?.url || "/placeholder.svg?height=200&width=200",
+                  description: item.description || "",
+                  type: "podcast",
+                }))
+
+              if (featuredItems.length > 0) {
+                setPodcasts(featuredItems)
+                console.log(`Loaded ${featuredItems.length} featured podcast playlists`)
+                return
+              }
+            }
+          }
+
+          throw new Error("No podcasts found")
+        }
       }
     } catch (error) {
       console.error(`Error in loadRecentContent for ${type}:`, error)
       toast({
         title: `Error Loading ${type}`,
-        description: `We couldn't load your recent ${type}. Using sample data instead.`,
+        description: error instanceof Error ? error.message : `We couldn't load your ${type}. Please try again.`,
         variant: "destructive",
       })
 
-      // Set fallback data based on type
+      // Set minimal fallback data
       if (type === "artists") {
         setArtists([
           {
-            id: "sample-1",
-            name: "The Weeknd",
+            id: "fallback-1",
+            name: "No artists found",
             imageUrl: "/placeholder.svg?height=200&width=200",
-            type: "artist",
-          },
-          {
-            id: "sample-2",
-            name: "Dua Lipa",
-            imageUrl: "/placeholder.svg?height=200&width=200",
+            description: "Try listening to more music to see your top artists",
             type: "artist",
           },
         ])
       } else if (type === "albums") {
         setAlbums([
           {
-            id: "sample-album-1",
-            name: "After Hours",
+            id: "fallback-1",
+            name: "No albums found",
             imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "The Weeknd",
-            type: "album",
-          },
-          {
-            id: "sample-album-2",
-            name: "Future Nostalgia",
-            imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "Dua Lipa",
+            description: "Try saving some albums to your library",
             type: "album",
           },
         ])
       } else if (type === "podcasts") {
         setPodcasts([
           {
-            id: "podcast-1",
-            name: "Music Decoded",
+            id: "fallback-1",
+            name: "No podcasts found",
             imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "Exploring the science behind your favorite songs",
-            type: "podcast",
-          },
-          {
-            id: "podcast-2",
-            name: "Artist Interviews",
-            imageUrl: "/placeholder.svg?height=200&width=200",
-            description: "Conversations with top musicians",
+            description: "Try saving some podcasts to your library",
             type: "podcast",
           },
         ])
@@ -590,11 +616,19 @@ export default function Home() {
     if (searchInputRef.current) {
       searchInputRef.current.focus()
     }
+    // Close sidebar on mobile after search click
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
   }
 
   // Function to handle sidebar moods click
   const handleSidebarMoodsClick = () => {
     setIsMoodsModalOpen(true)
+    // Close sidebar on mobile after moods click
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
 
     // Load user moods from Supabase
     const loadUserMoods = async () => {
@@ -636,23 +670,43 @@ export default function Home() {
   const handleSidebarArtistsClick = () => {
     setIsArtistsModalOpen(true)
     loadRecentContent("artists")
+    // Close sidebar on mobile after artists click
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
   }
 
   // Function to handle sidebar albums click
   const handleSidebarAlbumsClick = () => {
     setIsAlbumsModalOpen(true)
     loadRecentContent("albums")
+    // Close sidebar on mobile after albums click
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
   }
 
   // Function to handle sidebar radio click
   const handleSidebarRadioClick = () => {
     setIsRadioModalOpen(true)
     loadRecentContent("podcasts")
+    // Close sidebar on mobile after radio click
+    if (isMobile) {
+      setIsSidebarOpen(false)
+    }
+  }
+
+  // Create an overlay for mobile sidebar
+  const SidebarOverlay = () => {
+    if (!isMobile || !isSidebarOpen) return null
+
+    return <div className="fixed inset-0 bg-black/70 z-10" onClick={toggleSidebar} />
   }
 
   return (
     <div className="h-screen bg-[#1a1a1a] text-white overflow-hidden">
       <div className={`flex h-full ${isLoginModalOpen ? "blur-sm" : ""}`}>
+        {/* Sidebar for desktop or when open on mobile */}
         <Sidebar
           playlists={playlists}
           onPlaylistSelect={handlePlaylistSelect}
@@ -662,12 +716,24 @@ export default function Home() {
           onAlbumsClick={handleSidebarAlbumsClick}
           onRadioClick={handleSidebarRadioClick}
           isLoadingPlaylists={isLoadingPlaylists}
+          isOpen={isSidebarOpen}
+          onToggle={toggleSidebar}
         />
+
+        {/* Overlay for mobile sidebar */}
+        <SidebarOverlay />
 
         <main className="flex-1 overflow-hidden">
           <div className="h-full flex flex-col">
             <header className="flex items-center justify-between px-6 py-4">
               <div className="flex items-center gap-2">
+                {/* Menu button for mobile */}
+                {isMobile && (
+                  <Button variant="ghost" size="icon" className="text-white mr-2" onClick={toggleSidebar}>
+                    <Menu className="h-6 w-6" />
+                  </Button>
+                )}
+
                 <Button
                   variant="ghost"
                   size="icon"
@@ -736,7 +802,7 @@ export default function Home() {
                 </Button>
 
                 {isAuthenticated && (
-                  <div className="ml-4 w-64">
+                  <div className={`ml-4 ${isMobile ? "w-full max-w-[200px]" : "w-64"}`}>
                     <SearchBar
                       ref={searchInputRef}
                       onSearch={(query) => {
@@ -760,14 +826,16 @@ export default function Home() {
 
               {isAuthenticated ? (
                 <div className="flex items-center gap-4">
-                  <Button
-                    variant="outline"
-                    className="bg-[#00FFFF] text-black border-0 hover:bg-[#00FFFF]/80"
-                    onClick={() => setIsCreatePlaylistModalOpen(true)}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Mood
-                  </Button>
+                  {!isMobile && (
+                    <Button
+                      variant="outline"
+                      className="bg-[#00FFFF] text-black border-0 hover:bg-[#00FFFF]/80"
+                      onClick={() => setIsCreatePlaylistModalOpen(true)}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Mood
+                    </Button>
+                  )}
 
                   <UserProfileButton user={user} onLogout={handleLogout} />
                 </div>
@@ -850,6 +918,19 @@ export default function Home() {
                 ) : (
                   <ScrollArea className="h-full">
                     <div className="space-y-8 p-6">
+                      {/* Mobile Create Mood button */}
+                      {isMobile && (
+                        <div className="flex justify-center mb-4">
+                          <Button
+                            className="bg-[#00FFFF] text-black border-0 hover:bg-[#00FFFF]/80 w-full max-w-xs"
+                            onClick={() => setIsCreatePlaylistModalOpen(true)}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Mood
+                          </Button>
+                        </div>
+                      )}
+
                       <section>
                         <div className="flex items-center justify-between mb-4">
                           <h2 className="text-2xl font-bold">New For You</h2>

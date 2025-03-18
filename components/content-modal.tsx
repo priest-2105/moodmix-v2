@@ -91,8 +91,10 @@ export default function ContentModal({
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <h3 className="font-medium text-center">{item.name}</h3>
-                  {item.description && <p className="text-xs text-gray-400 text-center mt-1">{item.description}</p>}
+                  <h3 className="font-medium text-center line-clamp-1">{item.name}</h3>
+                  {item.description && (
+                    <p className="text-xs text-gray-400 text-center mt-1 line-clamp-2">{item.description}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -108,8 +110,8 @@ export default function ContentModal({
               <p className="text-gray-400 text-center max-w-md mb-6">
                 {type === "moods" && "Create your first mood-based collection to get started"}
                 {type === "artists" && "Listen to some music to see your recent artists"}
-                {type === "albums" && "Listen to some albums to see them here"}
-                {type === "podcasts" && "Explore podcasts to see them here"}
+                {type === "albums" && "Save some albums to your library to see them here"}
+                {type === "podcasts" && "Save some podcasts to your library to see them here"}
               </p>
               {type === "moods" && (
                 <Button onClick={onCreateClick} className="bg-[#00FFFF] text-black hover:bg-[#00FFFF]/80">
