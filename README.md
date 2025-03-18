@@ -201,18 +201,6 @@ The playlist view shows:
 ![Playlist View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1038).png)
 
 
-### Mood View
-
-The mood view displays:
-
-- Mood collection details and cover image
-- Tracks in the collection
-- Playback controls
-- Background color based on the mood type
-
-
-![Mood View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1019).png)
-
 
 
 ### Moods and Playlists Search
@@ -258,6 +246,19 @@ The create mood modal allows users to:
 
 ![create mood](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1027).png)
 
+
+
+### Mood View
+
+The mood view displays:
+
+- Mood collection details and cover image
+- Tracks in the collection
+- Playback controls
+- Background color based on the mood type
+
+
+![Mood View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1019).png)
 
 
 
