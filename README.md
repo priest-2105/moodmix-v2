@@ -1,6 +1,6 @@
 # Moodmix - Spotify Mood-Based Music Player
 
-![Moodmix Logo](https://placeholder.svg?height=200&width=200&text=Moodmix)
+![Moodmix Logo](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1029).png)
 
 ## Overview
 
@@ -176,6 +176,8 @@ npm run dev
 ## Key Features Explained
 
 ### Home Page
+
+![Homepage](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1029).png)
 
 The home page displays:
 
