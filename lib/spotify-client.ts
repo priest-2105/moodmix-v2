@@ -1,7 +1,7 @@
 // lib/spotify-client.ts - Client-side functions (no 'use server' directive)
 
 // Only use environment variables, never hardcode credentials
-const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || ""
+const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID || ""
 
 // Update the REDIRECT_URI to match what's in your Spotify Developer Dashboard
 const REDIRECT_URI = "http://localhost:3000/callback"
