@@ -9,14 +9,14 @@ import { useToast } from "@/components/ui/use-toast"
 
 interface MusicPlayerProps {
   playlistId: string
-  accessToken: string | null
+  accessToken: string
   onTrackPlay: (track: any) => void
   currentTrack: any
   isPlaying: boolean
   onPlayPause: () => void
   onNext: () => void
   onPrevious: () => void
-  playerState?: any // Add this prop to receive player state
+  playerState?: any
 }
 
 export default function MusicPlayer({
@@ -35,54 +35,75 @@ export default function MusicPlayer({
   const [duration, setDuration] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
   const progressInterval = useRef<NodeJS.Timeout | null>(null)
+  const lastUpdateTime = useRef<number>(Date.now())
+  const lastPosition = useRef<number>(0)
   const { toast } = useToast()
 
   // Update progress and duration from player state
   useEffect(() => {
     if (playerState && !isSeeking) {
-      setProgress(playerState.position || 0)
-      setDuration(playerState.duration || 0)
+      // Update duration from player state
+      if (playerState.duration) {
+        setDuration(playerState.duration)
+      }
+
+      // Update progress from player state
+      if (playerState.position !== undefined) {
+        setProgress(playerState.position)
+        lastPosition.current = playerState.position
+        lastUpdateTime.current = Date.now()
+      }
     }
   }, [playerState, isSeeking])
 
   // Update progress bar when playing
   useEffect(() => {
-    if (isPlaying && !isSeeking) {
-      // Clear any existing interval
-      if (progressInterval.current) {
-        clearInterval(progressInterval.current)
-      }
+    // Clear any existing interval
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current)
+      progressInterval.current = null
+    }
 
+    if (isPlaying && !isSeeking) {
       // Start a new interval to update progress
-      const startTime = Date.now() - progress
       progressInterval.current = setInterval(() => {
-        const newProgress = Date.now() - startTime
-        if (newProgress < duration) {
-          setProgress(newProgress)
-        } else {
+        // Calculate elapsed time since last update from Spotify
+        const now = Date.now()
+        const elapsed = now - lastUpdateTime.current
+
+        // Calculate new position based on elapsed time
+        const estimatedPosition = lastPosition.current + elapsed
+
+        if (estimatedPosition < duration) {
+          setProgress(estimatedPosition)
+        } else if (duration > 0) {
           // Track ended
           setProgress(duration)
           clearInterval(progressInterval.current!)
+          progressInterval.current = null
         }
-      }, 1000)
-    } else if (progressInterval.current) {
-      // Clear interval when paused
-      clearInterval(progressInterval.current)
+      }, 50) // Update more frequently (50ms) for smoother progress
     }
 
     return () => {
       if (progressInterval.current) {
         clearInterval(progressInterval.current)
+        progressInterval.current = null
       }
     }
-  }, [isPlaying, duration, progress, isSeeking])
+  }, [isPlaying, duration, isSeeking])
 
   // Set duration when current track changes
   useEffect(() => {
     if (currentTrack) {
+      // Set duration from track metadata
       setDuration(currentTrack.duration_ms || 0)
+
+      // Reset progress when track changes
       if (!playerState) {
         setProgress(0)
+        lastPosition.current = 0
+        lastUpdateTime.current = Date.now()
       }
     }
   }, [currentTrack, playerState])
@@ -118,16 +139,22 @@ export default function MusicPlayer({
     // Seek in Spotify player if we have access token
     if (accessToken) {
       try {
-        await fetch("https://api.spotify.com/v1/me/player/seek", {
+        const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${Math.round(seekTime)}`, {
           method: "PUT",
           headers: {
             Authorization: `Bearer ${accessToken}`,
             "Content-Type": "application/json",
           },
-          params: {
-            position_ms: Math.round(seekTime),
-          },
         })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("Error seeking:", response.status, errorText)
+        } else {
+          // Update our local tracking variables
+          lastPosition.current = seekTime
+          lastUpdateTime.current = Date.now()
+        }
       } catch (error) {
         console.error("Error seeking:", error)
       } finally {

@@ -43,6 +43,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
         name: mood.name,
         mood_type: mood.mood_type,
         image_url: mood.image_url,
+        imageUrl: mood.imageUrl, // This might be the issue - we need to check both properties
         description: mood.description,
       })
     }
@@ -191,6 +192,9 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
   const totalDuration = tracks.reduce((acc, track) => acc + (track.duration_ms || 0), 0)
   const totalDurationFormatted = formatDuration(totalDuration)
 
+  // Get the correct image URL from either image_url or imageUrl property
+  const moodImageUrl = mood.image_url || mood.imageUrl || `/placeholder.svg?height=200&width=200&text=${mood.name}`
+
   return (
     <div className="flex flex-col h-full">
       {/* Header with background gradient using dominant color */}
@@ -201,11 +205,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
         }}
       >
         <div className="flex items-end gap-6 z-10">
-          <img
-            src={mood.image_url || `/placeholder.svg?height=200&width=200&text=${mood.name}`}
-            alt={mood.name}
-            className="h-52 w-52 shadow-2xl"
-          />
+          <img src={moodImageUrl || "/placeholder.svg"} alt={mood.name} className="h-52 w-52 shadow-2xl object-cover" />
           <div className="flex flex-col gap-2">
             <span className="text-sm font-semibold uppercase">Mood</span>
             <h1 className="text-7xl font-bold text-white">{mood.name}</h1>

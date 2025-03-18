@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useToast } from "@/components/ui/use-toast"
 import { Loader2 } from "lucide-react"
 
@@ -31,6 +31,9 @@ export default function SpotifyWebPlayer({
   const [player, setPlayer] = useState<any>(null)
   const [deviceId, setDeviceId] = useState<string | null>(null)
   const [isInitializing, setIsInitializing] = useState(true)
+  const [isPlayerReady, setIsPlayerReady] = useState(false)
+  const [lastStateUpdate, setLastStateUpdate] = useState<number>(0)
+  const pendingPlayRequest = useRef<{ uri: string; play: boolean } | null>(null)
   const { toast } = useToast()
 
   // Load Spotify Web Playback SDK script
@@ -114,7 +117,16 @@ export default function SpotifyWebPlayer({
         transferPlayback(token, device_id)
           .then(() => {
             console.log("Playback transferred to web player")
+            setIsPlayerReady(true)
             onPlayerReady()
+
+            // Process any pending play request
+            if (pendingPlayRequest.current) {
+              console.log("Processing pending play request:", pendingPlayRequest.current)
+              const { uri, play } = pendingPlayRequest.current
+              playTrack(uri, play, token, device_id, spotifyPlayer)
+              pendingPlayRequest.current = null
+            }
           })
           .catch((err) => {
             console.error("Error transferring playback:", err)
@@ -126,6 +138,7 @@ export default function SpotifyWebPlayer({
       spotifyPlayer.addListener("not_ready", ({ device_id }: { device_id: string }) => {
         console.log("Device has gone offline:", device_id)
         setDeviceId(null)
+        setIsPlayerReady(false)
       })
 
       // Player State Changed
@@ -135,14 +148,28 @@ export default function SpotifyWebPlayer({
           return
         }
 
-        console.log("Player state changed:", {
-          track: state.track_window.current_track.name,
-          paused: state.paused,
-          position: state.position,
-          duration: state.duration,
-        })
+        // Throttle state updates to avoid excessive re-renders
+        const now = Date.now()
+        if (now - lastStateUpdate > 100) {
+          // Only process state updates every 100ms
+          setLastStateUpdate(now)
 
-        onPlayerStateChanged(state)
+          console.log("Player state changed:", {
+            track: state.track_window.current_track.name,
+            paused: state.paused,
+            position: state.position,
+            duration: state.duration,
+          })
+
+          // Enhance the state with additional information
+          const enhancedState = {
+            ...state,
+            // Add any additional properties needed
+            timestamp: now,
+          }
+
+          onPlayerStateChanged(enhancedState)
+        }
       })
 
       // Connect the player
@@ -164,7 +191,7 @@ export default function SpotifyWebPlayer({
 
       setPlayer(spotifyPlayer)
     },
-    [onError, onPlayerReady, onPlayerStateChanged, toast],
+    [onError, onPlayerReady, onPlayerStateChanged, toast, lastStateUpdate],
   )
 
   // Transfer playback to this device
@@ -197,61 +224,98 @@ export default function SpotifyWebPlayer({
     }
   }
 
-  // Control playback based on props
-  useEffect(() => {
-    if (!player || !deviceId || !accessToken) return
+  // Function to play a track
+  const playTrack = async (uri: string, shouldPlay: boolean, token: string, deviceId: string, playerInstance: any) => {
+    try {
+      if (shouldPlay) {
+        console.log("Playing track:", uri)
 
-    const handlePlayback = async () => {
-      try {
-        if (isPlaying && currentTrackUri) {
-          // Check if this is a fallback track
-          if (currentTrackUri.includes("fallback")) {
-            console.error("Cannot play fallback track:", currentTrackUri)
-            toast({
-              title: "Playback Error",
-              description:
-                "This track cannot be played because it's a fallback track. Please create a new mood with real Spotify tracks.",
-              variant: "destructive",
-            })
-            return
-          }
+        // Get current player state to check if we're already playing this track
+        const state = await playerInstance.getCurrentState()
+        const isCurrentTrack = state && state.track_window.current_track && state.track_window.current_track.uri === uri
 
-          console.log("Playing track:", currentTrackUri)
-
-          // Play the track on the web player
-          await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+        if (isCurrentTrack && state.paused) {
+          // If it's the same track but paused, just resume
+          console.log("Resuming current track")
+          await playerInstance.resume()
+        } else if (!isCurrentTrack) {
+          // If it's a different track, play it
+          console.log("Playing new track via API")
+          const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
             method: "PUT",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${accessToken}`,
+              Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
-              uris: [currentTrackUri],
+              uris: [uri],
             }),
-          }).then((response) => {
-            if (!response.ok) {
-              return response.text().then((text) => {
-                console.error("Playback error response:", text)
-                throw new Error(`Failed to play track: ${response.status} ${response.statusText}`)
-              })
-            }
           })
-        } else if (!isPlaying && player) {
-          console.log("Pausing playback")
-          player.pause()
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error("Playback error response:", response.status, errorText)
+            throw new Error(`Failed to play track: ${response.status} ${response.statusText}`)
+          }
         }
-      } catch (error) {
-        console.error("Error controlling playback:", error)
-        toast({
-          title: "Playback Error",
-          description: "Failed to control playback. Please try again.",
-          variant: "destructive",
-        })
+      } else {
+        console.log("Pausing playback")
+        await playerInstance.pause()
       }
+    } catch (error) {
+      console.error("Error in playTrack:", error)
+      throw error
+    }
+  }
+
+  // Control playback based on props
+  useEffect(() => {
+    if (!accessToken || !currentTrackUri) return
+
+    // Check if this is a fallback track
+    if (currentTrackUri.includes("fallback")) {
+      console.error("Cannot play fallback track:", currentTrackUri)
+      toast({
+        title: "Playback Error",
+        description:
+          "This track cannot be played because it's a fallback track. Please create a new mood with real Spotify tracks.",
+        variant: "destructive",
+      })
+      return
     }
 
-    handlePlayback()
-  }, [currentTrackUri, isPlaying, player, deviceId, accessToken, toast])
+    // If player is not ready, store the request for later
+    if (!isPlayerReady || !player || !deviceId) {
+      console.log("Player not ready, storing play request for later:", { uri: currentTrackUri, play: isPlaying })
+      pendingPlayRequest.current = { uri: currentTrackUri, play: isPlaying }
+      return
+    }
+
+    // Player is ready, play the track
+    playTrack(currentTrackUri, isPlaying, accessToken, deviceId, player).catch((error) => {
+      console.error("Error controlling playback:", error)
+      toast({
+        title: "Playback Error",
+        description: "Failed to control playback. Please try again.",
+        variant: "destructive",
+      })
+    })
+  }, [currentTrackUri, isPlaying, isPlayerReady, player, deviceId, accessToken, toast])
+
+  // Add a polling mechanism to keep the player state updated
+  useEffect(() => {
+    if (!player || !isPlayerReady) return
+
+    const pollInterval = setInterval(() => {
+      player.getCurrentState().then((state: any) => {
+        if (state) {
+          onPlayerStateChanged(state)
+        }
+      })
+    }, 500) // Poll every 500ms for more accurate updates
+
+    return () => clearInterval(pollInterval)
+  }, [player, onPlayerStateChanged, isPlayerReady])
 
   if (isInitializing) {
     return (
@@ -262,7 +326,7 @@ export default function SpotifyWebPlayer({
     )
   }
 
-  return null // This component doesn't render anything visible
+  return null 
 }
 
 // Helper function to convert track object to Spotify URI

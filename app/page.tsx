@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Plus, ChevronLeft, ChevronRight, Loader2, Play } from "lucide-react"
 import { getSpotifyToken, getUserProfile, getUserPlaylists, getRecentlyPlayedTracks } from "@/lib/spotify"
+import { Toaster } from "@/components/ui/toaster"
 import LoginModal from "@/components/login-modal"
 import CreatePlaylistModal from "@/components/create-playlist-modal"
 import PlaylistCard from "@/components/playlist-card"
@@ -23,7 +24,6 @@ import SearchBar from "@/components/search-bar"
 import SearchResults from "@/components/search-results"
 import { toast } from "@/components/ui/use-toast"
 import { getUserMoods } from "@/lib/supabase/moods"
-import { Toaster } from "@/components/ui/toaster"
 
 // Dummy data for mood types
 const moodTypes = [
@@ -298,9 +298,17 @@ export default function Home() {
   }
 
   // Add a function to handle player state changes
-  const handlePlayerStateChange = useCallback((state: any) => {
-    setPlayerState(state)
-  }, [])
+  const handlePlayerStateChange = useCallback(
+    (state: any) => {
+      setPlayerState(state)
+
+      // Sync the UI play state with the actual Spotify player state
+      if (state && state.paused !== undefined && isPlaying === state.paused) {
+        setIsPlaying(!state.paused)
+      }
+    },
+    [isPlaying],
+  )
 
   // Function to load recent artists, albums, and podcasts
   const loadRecentContent = async (type: "artists" | "albums" | "podcasts") => {
@@ -484,12 +492,14 @@ export default function Home() {
             name: "Music Decoded",
             imageUrl: "/placeholder.svg?height=200&width=200",
             description: "Exploring the science behind your favorite songs",
+            type: "podcast",
           },
           {
             id: "podcast-2",
             name: "Artist Interviews",
             imageUrl: "/placeholder.svg?height=200&width=200",
             description: "Conversations with top musicians",
+            type: "podcast",
           },
         ])
       }
@@ -715,22 +725,7 @@ export default function Home() {
                 ) : showPlaylistView && selectedPlaylist ? (
                   <PlaylistView playlist={selectedPlaylist} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : showMoodView && selectedMood ? (
-                  <MoodView
-                    mood={selectedMood}
-                    accessToken={accessToken}
-                    onTrackPlay={handleTrackPlay}
-                    onMoodDelete={(moodId) => {
-                      // Remove the mood from the state
-                      setMoods((prevMoods) => prevMoods.filter((m) => m.id !== moodId))
-                      // Go back to home
-                      handleBackToHome()
-                      // Show toast notification
-                      toast({
-                        title: "Mood Deleted",
-                        description: "The mood has been successfully deleted.",
-                      })
-                    }}
-                  />
+                  <MoodView mood={selectedMood} accessToken={accessToken} onTrackPlay={handleTrackPlay} />
                 ) : isLoading ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="flex flex-col items-center">
@@ -827,7 +822,6 @@ export default function Home() {
                             </Button>
                           </div>
                         </div>
-                        \
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                           {recentPlaylists.map((playlist) => (
                             <PlaylistCard
@@ -872,6 +866,7 @@ export default function Home() {
           </div>
         </main>
       </div>
+
       {currentlyPlaying && (
         <div
           className={`fixed bottom-0 left-0 right-0 h-20 bg-[#282828] border-t border-white/10 ${
@@ -880,7 +875,7 @@ export default function Home() {
         >
           <MusicPlayer
             playlistId={selectedPlaylist?.id || selectedMood?.id || ""}
-            accessToken={accessToken || ""}
+            accessToken={accessToken}
             onTrackPlay={handleTrackPlay}
             currentTrack={currentlyPlaying}
             isPlaying={isPlaying}
@@ -891,7 +886,9 @@ export default function Home() {
           />
         </div>
       )}
+
       <LoginModal isOpen={isLoginModalOpen} onClose={handleCloseLoginModal} />
+
       <CreatePlaylistModal
         isOpen={isCreatePlaylistModalOpen}
         onClose={() => setIsCreatePlaylistModalOpen(false)}
@@ -938,6 +935,7 @@ export default function Home() {
           setIsCreatePlaylistModalOpen(true)
         }}
       />
+
       <ContentModal
         isOpen={isArtistsModalOpen}
         onClose={() => setIsArtistsModalOpen(false)}
