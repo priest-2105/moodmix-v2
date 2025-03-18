@@ -177,7 +177,6 @@ npm run dev
 
 ### Home Page
 
-![Homepage](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1029).png)
 
 The home page displays:
 
@@ -185,6 +184,9 @@ The home page displays:
 - User's mood collections
 - New and recommended content
 - Quick access to search and navigation
+
+![Homepage](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1029).png)
+
 
 ### Playlist View
 
@@ -195,6 +197,10 @@ The playlist view shows:
 - Playback controls
 - Background color adapts to the playlist cover art
 
+
+![Mood View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1038).png)
+
+
 ### Mood View
 
 The mood view displays:
@@ -203,6 +209,20 @@ The mood view displays:
 - Tracks in the collection
 - Playback controls
 - Background color based on the mood type
+
+
+![Mood View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1019).png)
+
+
+
+### Moods and Playlists Search
+
+The mood and playlist displays:
+
+- Accurate Search between Moods and Playlists
+
+![Moods and Playlist Search](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1034).png
+)
 
 ### Music Player
 
@@ -213,6 +233,20 @@ The persistent music player at the bottom of the screen provides:
 - Progress bar with seek functionality
 - Volume control
 
+![Music Player](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1033).png)
+
+### View Profile Modal
+
+The view profile modal allows users to:
+
+- View Spotify Profile Name
+- View Spotify Account type
+- View Region
+
+![user profile modal](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1025).png)
+
+
+
 ### Create Mood Modal
 
 The create mood modal allows users to:
@@ -221,6 +255,11 @@ The create mood modal allows users to:
 - Select a mood type
 - Choose tracks from recommendations or existing playlists
 - Upload a custom cover image
+
+![create mood](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1027).png)
+
+
+
 
 ## Troubleshooting
 
