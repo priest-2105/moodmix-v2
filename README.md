@@ -198,7 +198,7 @@ The playlist view shows:
 - Background color adapts to the playlist cover art
 
 
-![Mood View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1038).png)
+![Playlist View](https://github.com/priest-2105/moodmix-v2/blob/e5033fe2c6ef24188d663d5082144958670603c2/public/documentation/Screenshot%20(1038).png)
 
 
 ### Mood View
