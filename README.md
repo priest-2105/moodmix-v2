@@ -234,7 +234,7 @@ The create mood modal allows users to:
    - Check that the database tables are properly set up
    - Ensure your Supabase project is active
    
-3. **Authentication Errors ***
+3. **Authentication Errors**
  - Verify your Spotify API credentials
  - Check that the redirect URI is correctly set up in the Spotify
  - Clear browser cookies and localStorage, then try again
@@ -243,7 +243,7 @@ The create mood modal allows users to:
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-- 1 . Fork the repository 
+- 1. Fork the repository 
 - 2. Create your feature branch ( `git checkout -b feature/amazing-feature `) 
 - 3. Commit your changes ( `git commit -m  'Add some amazing feature ' `) 
 - 4. Push to the branch ( `git push origin feature/amazing-feature `) 
