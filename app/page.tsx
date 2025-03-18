@@ -919,7 +919,7 @@ export default function Home() {
                   <ScrollArea className="h-full">
                     <div className="space-y-8 p-6">
                       {/* Mobile Create Mood button */}
-                      {isMobile && (
+                      {/* {isMobile && (
                         <div className="flex justify-center mb-4">
                           <Button
                             className="bg-[#00FFFF] text-black border-0 hover:bg-[#00FFFF]/80 w-full max-w-xs"
@@ -929,7 +929,7 @@ export default function Home() {
                             Create Mood
                           </Button>
                         </div>
-                      )}
+                      )} */}
 
                       <section>
                         <div className="flex items-center justify-between mb-4">

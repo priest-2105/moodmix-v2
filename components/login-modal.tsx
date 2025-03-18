@@ -83,7 +83,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
         </DialogHeader>
         <div className="flex flex-col gap-6 py-6">
           <div className="flex justify-center">
-            <Music2 className="h-20 w-20 text-[#00FFFF]" />
+            <img src="logo.png" alt="Moodmix" />
           </div>
 
           {error && (

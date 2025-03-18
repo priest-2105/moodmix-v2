@@ -84,8 +84,9 @@ export default function Sidebar({
       <div className="p-6">
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center gap-2">
-            <Music2 className="h-8 w-8" />
-            <span className="text-xl font-bold">Moodmix</span>
+          <img src="logo.png" alt="Moodmix" height={50} width={50} />
+            {/* <Music2 className="h-8 w-8" /> */}
+            {/* <span className="text-xl font-bold">Moodmix</span> */}
           </div>
           {isMobile && (
             <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={onToggle}>
