@@ -1,10 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { Home, Search, Music2, Radio, User2, Disc3 } from "lucide-react"
+import { Home, Search, Music2, Radio, User2, Disc3, X } from "lucide-react"
 import type { Playlist } from "@/types/spotify"
+import { cn } from "@/lib/utils"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface SidebarProps {
   playlists?: Playlist[]
@@ -15,6 +17,8 @@ interface SidebarProps {
   onAlbumsClick?: () => void
   onRadioClick?: () => void
   isLoadingPlaylists?: boolean
+  isOpen?: boolean
+  onToggle?: () => void
 }
 
 export default function Sidebar({
@@ -26,22 +30,68 @@ export default function Sidebar({
   onAlbumsClick,
   onRadioClick,
   isLoadingPlaylists = false,
+  isOpen = true,
+  onToggle,
 }: SidebarProps) {
   const [showAllPlaylists, setShowAllPlaylists] = useState(false)
-  const displayedPlaylists = showAllPlaylists ? playlists : playlists.slice(0, 5)
+  const isMobile = useMobile(1024) // Use 1024px as breakpoint for tablets
+  const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile)
+
+  // Update sidebar state when isOpen prop changes
+  useEffect(() => {
+    setIsSidebarOpen(isMobile ? isOpen : true)
+  }, [isOpen, isMobile])
+
+  // Update sidebar state when screen size changes
+  useEffect(() => {
+    setIsSidebarOpen(!isMobile)
+  }, [isMobile])
 
   const handlePlaylistClick = (playlist: Playlist) => {
     if (onPlaylistSelect) {
       onPlaylistSelect(playlist)
+      // Close sidebar on mobile after selection
+      if (isMobile && onToggle) {
+        onToggle()
+      }
     }
   }
 
+  const handleNavClick = (callback?: () => void) => {
+    if (callback) {
+      callback()
+      // Close sidebar on mobile after navigation
+      if (isMobile && onToggle) {
+        onToggle()
+      }
+    }
+  }
+
+  const displayedPlaylists = showAllPlaylists ? playlists : playlists.slice(0, 5)
+
+  // If sidebar is closed on mobile, don't render the content
+  if (isMobile && !isSidebarOpen) {
+    return null
+  }
+
   return (
-    <div className="w-60 bg-black flex flex-col h-full">
+    <div
+      className={cn(
+        "bg-black flex flex-col h-full transition-all duration-300 z-20",
+        isMobile ? "fixed left-0 top-0 bottom-0 w-64" : "w-60",
+      )}
+    >
       <div className="p-6">
-        <div className="flex items-center gap-2 mb-8">
-          <Music2 className="h-8 w-8" />
-          <span className="text-xl font-bold">Moodmix</span>
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-2">
+            <Music2 className="h-8 w-8" />
+            <span className="text-xl font-bold">Moodmix</span>
+          </div>
+          {isMobile && (
+            <Button variant="ghost" size="icon" className="text-white hover:bg-white/10" onClick={onToggle}>
+              <X className="h-5 w-5" />
+            </Button>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -49,6 +99,7 @@ export default function Sidebar({
             variant="ghost"
             size="lg"
             className="w-full justify-start text-white hover:bg-white/10 bg-[#00FFFF]/10 border-l-4 border-[#00FFFF]"
+            onClick={() => handleNavClick()}
           >
             <Home className="mr-3 h-5 w-5 text-[#00FFFF]" />
             Home
@@ -57,7 +108,7 @@ export default function Sidebar({
             variant="ghost"
             size="lg"
             className="w-full justify-start text-white hover:bg-white/10"
-            onClick={onSearchClick}
+            onClick={() => handleNavClick(onSearchClick)}
           >
             <Search className="mr-3 h-5 w-5" />
             Search
@@ -66,7 +117,7 @@ export default function Sidebar({
             variant="ghost"
             size="lg"
             className="w-full justify-start text-white hover:bg-white/10"
-            onClick={onMoodsClick}
+            onClick={() => handleNavClick(onMoodsClick)}
           >
             <Radio className="mr-3 h-5 w-5" />
             Your Moods
@@ -132,7 +183,7 @@ export default function Sidebar({
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-                onClick={onRadioClick}
+                onClick={() => handleNavClick(onRadioClick)}
               >
                 <Radio className="mr-3 h-4 w-4" />
                 Radio
@@ -141,7 +192,7 @@ export default function Sidebar({
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-                onClick={onArtistsClick}
+                onClick={() => handleNavClick(onArtistsClick)}
               >
                 <User2 className="mr-3 h-4 w-4" />
                 Artists
@@ -150,7 +201,7 @@ export default function Sidebar({
                 variant="ghost"
                 size="sm"
                 className="w-full justify-start text-white/70 hover:text-white hover:bg-white/10"
-                onClick={onAlbumsClick}
+                onClick={() => handleNavClick(onAlbumsClick)}
               >
                 <Disc3 className="mr-3 h-4 w-4" />
                 Albums

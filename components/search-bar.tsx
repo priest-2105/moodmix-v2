@@ -5,6 +5,7 @@ import { SearchIcon, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useDebounce } from "@/hooks/use-debounce"
+import { useMobile } from "@/hooks/use-mobile"
 
 interface SearchBarProps {
   onSearch: (query: string) => void
@@ -16,6 +17,7 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
   ({ onSearch, placeholder = "Search...", className = "" }, ref) => {
     const [query, setQuery] = useState("")
     const debouncedQuery = useDebounce(query, 300)
+    const isMobile = useMobile(768)
 
     useEffect(() => {
       onSearch(debouncedQuery)
@@ -35,7 +37,7 @@ const SearchBar = forwardRef<HTMLInputElement, SearchBarProps>(
         <Input
           ref={ref}
           type="text"
-          placeholder={placeholder}
+          placeholder={isMobile ? "Search..." : placeholder}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="pl-9 pr-9 bg-white/10 border-white/10 text-white placeholder:text-white/50 focus-visible:ring-[#00FFFF] focus-visible:ring-offset-0 focus-visible:border-[#00FFFF]"

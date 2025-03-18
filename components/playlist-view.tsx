@@ -194,24 +194,25 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
 
       {/* Header with background gradient using dominant color */}
       <div
-        className="relative flex items-end p-8 h-[340px]"
+        className="relative flex flex-col md:flex-row md:items-end p-4 md:p-8 h-[240px] md:h-[340px]"
         style={{
           background: `linear-gradient(to bottom, ${dominantColor}, rgba(0, 0, 0, 0.9))`,
         }}
       >
-        <div className="flex items-end gap-6 z-10">
+        <div className="flex flex-col md:flex-row md:items-end gap-4 md:gap-6 z-10">
           <img
             src={playlist.images?.[0]?.url || "/placeholder.svg?height=200&width=200"}
             alt={playlist.name}
-            className="h-52 w-52 shadow-2xl"
+            className="h-32 w-32 md:h-52 md:w-52 shadow-2xl mx-auto md:mx-0"
           />
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 text-center md:text-left">
             <span className="text-sm font-semibold uppercase">Playlist</span>
-            <h1 className="text-7xl font-bold text-white">{playlist.name}</h1>
-            <div className="flex items-center gap-1 mt-4 text-sm">
+            <h1 className="text-3xl md:text-7xl font-bold text-white">{playlist.name}</h1>
+            <div className="flex flex-col md:flex-row md:items-center gap-1 mt-2 md:mt-4 text-sm">
               <span className="font-semibold">{playlist.owner?.display_name}</span>
+              <span className="hidden md:inline text-white/70">•</span>
               <span className="text-white/70">
-                • {tracks.length} songs, {totalDurationFormatted}
+                {tracks.length} songs, {totalDurationFormatted}
               </span>
             </div>
           </div>
@@ -219,19 +220,23 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
       </div>
 
       {/* Playback controls */}
-      <div className="bg-black/30 p-6 flex items-center gap-4">
+      <div className="bg-black/30 p-4 md:p-6 flex items-center gap-4">
         <Button
-          className={`w-14 h-14 rounded-full ${isPlaying && currentTrackIndex !== null ? "bg-white" : "bg-[#00FFFF]"} text-black hover:bg-opacity-80 flex items-center justify-center`}
+          className={`w-12 h-12 md:w-14 md:h-14 rounded-full ${isPlaying && currentTrackIndex !== null ? "bg-white" : "bg-[#00FFFF]"} text-black hover:bg-opacity-80 flex items-center justify-center`}
           onClick={handlePlayAll}
           disabled={!playerReady || tracks.length === 0}
         >
-          {isPlaying && currentTrackIndex !== null ? <Pause className="h-7 w-7" /> : <Play className="h-7 w-7" />}
+          {isPlaying && currentTrackIndex !== null ? (
+            <Pause className="h-6 w-6 md:h-7 md:w-7" />
+          ) : (
+            <Play className="h-6 w-6 md:h-7 md:w-7" />
+          )}
         </Button>
         <Button variant="ghost" size="icon" className="text-white/70 hover:text-white">
-          <Heart className="h-6 w-6" />
+          <Heart className="h-5 w-5 md:h-6 md:w-6" />
         </Button>
         <Button variant="ghost" size="icon" className="text-white/70 hover:text-white">
-          <MoreHorizontal className="h-6 w-6" />
+          <MoreHorizontal className="h-5 w-5 md:h-6 md:w-6" />
         </Button>
       </div>
 
@@ -289,10 +294,10 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
       <ScrollArea className="flex-1">
         <div className="p-6">
           {/* Table header */}
-          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-4 px-4 py-2 text-sm font-medium text-white/60 border-b border-white/10">
-            <div className="w-8 text-center">#</div>
+          <div className="grid grid-cols-[auto_1fr_auto_auto] gap-2 md:gap-4 px-2 md:px-4 py-2 text-sm font-medium text-white/60 border-b border-white/10">
+            <div className="w-6 md:w-8 text-center">#</div>
             <div>Title</div>
-            <div>Plays</div>
+            <div className="hidden md:block">Plays</div>
             <div className="flex items-center">
               <Clock className="h-4 w-4" />
             </div>
@@ -313,12 +318,12 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
               {tracks.map((track, index) => (
                 <div
                   key={track.id}
-                  className={`grid grid-cols-[auto_1fr_auto_auto] gap-4 px-4 py-3 text-white/80 hover:bg-white/10 cursor-pointer ${
+                  className={`grid grid-cols-[auto_1fr_auto_auto] gap-2 md:gap-4 px-2 md:px-4 py-3 text-white/80 hover:bg-white/10 cursor-pointer ${
                     currentTrackIndex === index ? "bg-white/10" : ""
                   }`}
                   onClick={() => handlePlay(index)}
                 >
-                  <div className="w-8 text-center flex items-center justify-center">
+                  <div className="w-6 md:w-8 text-center flex items-center justify-center">
                     {currentTrackIndex === index ? (
                       isPlaying ? (
                         <span className="w-4 h-4 text-[#00FFFF] animate-pulse">▶</span>
@@ -338,7 +343,9 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
                     </span>
                     <span className="text-sm text-white/60">{track.artists?.map((a: any) => a.name).join(", ")}</span>
                   </div>
-                  <div className="text-white/60 text-sm">{Math.floor(Math.random() * 1000000).toLocaleString()}</div>
+                  <div className="hidden md:block text-white/60 text-sm">
+                    {Math.floor(Math.random() * 1000000).toLocaleString()}
+                  </div>
                   <div className="text-white/60 text-sm">{formatDuration(track.duration_ms)}</div>
                 </div>
               ))}

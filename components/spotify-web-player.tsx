@@ -39,6 +39,9 @@ export default function SpotifyWebPlayer({
   const playerState = useRef<any>(null)
   const lastTrackUri = useRef<string | null>(null)
   const trackLoadingTimeout = useRef<NodeJS.Timeout | null>(null)
+  const volumeChangeTimeout = useRef<NodeJS.Timeout | null>(null)
+  const lastVolumeChange = useRef<number>(Date.now())
+  const currentVolume = useRef<number>(50) // Default volume 50%
 
   // Load Spotify Web Playback SDK script
   useEffect(() => {
@@ -72,6 +75,9 @@ export default function SpotifyWebPlayer({
       if (trackLoadingTimeout.current) {
         clearTimeout(trackLoadingTimeout.current)
       }
+      if (volumeChangeTimeout.current) {
+        clearTimeout(volumeChangeTimeout.current)
+      }
     }
   }, [accessToken])
 
@@ -85,7 +91,7 @@ export default function SpotifyWebPlayer({
         getOAuthToken: (cb: (token: string) => void) => {
           cb(token)
         },
-        volume: 0.5,
+        volume: currentVolume.current / 100, // Initialize with stored volume
       })
 
       // Error handling
@@ -131,7 +137,9 @@ export default function SpotifyWebPlayer({
 
             // Set initial volume
             spotifyPlayer.getVolume().then((volume: number) => {
-              console.log(`Initial player volume: ${Math.round(volume * 100)}%`)
+              const volumePercent = Math.round(volume * 100)
+              console.log(`Initial player volume: ${volumePercent}%`)
+              currentVolume.current = volumePercent
             })
 
             // Process any pending play request
@@ -171,7 +179,10 @@ export default function SpotifyWebPlayer({
           // Add device info to the state
           const enhancedState = {
             ...state,
-            device: { id: deviceId },
+            device: {
+              id: deviceId,
+              volume_percent: currentVolume.current,
+            },
             timestamp: now,
           }
 
@@ -186,6 +197,7 @@ export default function SpotifyWebPlayer({
               paused: state.paused,
               position: state.position,
               duration: state.duration,
+              volume: currentVolume.current,
             })
           }
 
@@ -194,13 +206,41 @@ export default function SpotifyWebPlayer({
 
           // Always notify about state changes and pass the player instance
           onPlayerStateChanged(enhancedState, {
-            player: player,
+            player: spotifyPlayer,
             deviceId: deviceId,
             setVolume: (volumePercent: number) => {
-              if (player) {
-                player.setVolume(volumePercent / 100).catch((err: any) => {
-                  console.error("Error setting volume:", err)
-                })
+              // Debounce volume changes
+              const now = Date.now()
+              if (now - lastVolumeChange.current > 100) {
+                lastVolumeChange.current = now
+                currentVolume.current = volumePercent
+
+                console.log(`Setting volume to ${volumePercent}%`)
+                spotifyPlayer
+                  .setVolume(volumePercent / 100)
+                  .then(() => {
+                    console.log(`Volume set to ${volumePercent}%`)
+                  })
+                  .catch((err: any) => {
+                    console.error("Error setting volume:", err)
+                  })
+              } else {
+                // Debounce volume changes
+                if (volumeChangeTimeout.current) {
+                  clearTimeout(volumeChangeTimeout.current)
+                }
+                volumeChangeTimeout.current = setTimeout(() => {
+                  currentVolume.current = volumePercent
+                  console.log(`Setting debounced volume to ${volumePercent}%`)
+                  spotifyPlayer
+                    .setVolume(volumePercent / 100)
+                    .then(() => {
+                      console.log(`Volume set to ${volumePercent}%`)
+                    })
+                    .catch((err: any) => {
+                      console.error("Error setting volume:", err)
+                    })
+                }, 100)
               }
             },
           })
@@ -254,7 +294,13 @@ export default function SpotifyWebPlayer({
           activeDevice: currentPlayback.device?.name,
           isPlaying: currentPlayback.is_playing,
           isOurDevice: isAlreadyActive,
+          volume: currentPlayback.device?.volume_percent,
         })
+
+        // Update our volume reference if available
+        if (currentPlayback.device?.volume_percent) {
+          currentVolume.current = currentPlayback.device.volume_percent
+        }
       }
 
       // Only transfer if we're not already the active device
@@ -455,6 +501,7 @@ export default function SpotifyWebPlayer({
             player: player,
             deviceId: deviceId,
             setVolume: (volumePercent: number) => {
+              currentVolume.current = volumePercent
               if (player) {
                 player.setVolume(volumePercent / 100).catch((err: any) => {
                   console.error("Error setting volume:", err)

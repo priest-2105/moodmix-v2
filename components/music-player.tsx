@@ -36,12 +36,26 @@ export default function MusicPlayer({
   const [progress, setProgress] = useState(0)
   const [duration, setDuration] = useState(0)
   const [isSeeking, setIsSeeking] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [previousVolume, setPreviousVolume] = useState(0.7)
   const progressInterval = useRef<NodeJS.Timeout | null>(null)
   const lastUpdateTime = useRef<number>(Date.now())
   const lastPosition = useRef<number>(0)
   const { toast } = useToast()
   const trackChangeTime = useRef<number>(Date.now())
   const isTrackLoading = useRef<boolean>(false)
+  const volumeChangeTimeout = useRef<NodeJS.Timeout | null>(null)
+
+  // Initialize volume from player state
+  useEffect(() => {
+    if (playerState?.device?.volume_percent !== undefined) {
+      const spotifyVolume = playerState.device.volume_percent / 100
+      if (Math.abs(spotifyVolume - volume) > 0.05) {
+        setVolume(spotifyVolume)
+        setPreviousVolume(spotifyVolume)
+      }
+    }
+  }, [playerState?.device?.volume_percent])
 
   // Update progress and duration from player state
   useEffect(() => {
@@ -116,7 +130,7 @@ export default function MusicPlayer({
         progressInterval.current = null
       }
     }
-  }, [isPlaying, duration, isSeeking, onNext, isTrackLoading.current])
+  }, [isPlaying, duration, isSeeking, onNext])
 
   // Set duration when current track changes
   useEffect(() => {
@@ -133,46 +147,49 @@ export default function MusicPlayer({
     }
   }, [currentTrack, playerState])
 
-  const handleVolumeChange = async (value: number[]) => {
-    const newVolume = value[0]
-    setVolume(newVolume)
+  // Improved volume change handler with debouncing
+  const handleVolumeChange = useCallback(
+    (value: number[]) => {
+      const newVolume = value[0]
+      setVolume(newVolume)
+      setPreviousVolume(newVolume)
+      setIsMuted(newVolume === 0)
 
-    // Call the parent handler if provided
-    if (onVolumeChange) {
-      onVolumeChange(Math.round(newVolume * 100))
-    }
+      // Clear any existing timeout
+      if (volumeChangeTimeout.current) {
+        clearTimeout(volumeChangeTimeout.current)
+      }
 
-    // Update Spotify player volume if we have access token
-    if (accessToken) {
-      try {
-        // Get the current device ID from the player state
-        const deviceId = playerState?.device?.id
-
-        if (!deviceId) {
-          console.warn("No device ID available for volume control")
-          return
+      // Debounce volume changes to avoid too many API calls
+      volumeChangeTimeout.current = setTimeout(() => {
+        // Call the parent handler if provided
+        if (onVolumeChange) {
+          onVolumeChange(Math.round(newVolume * 100))
         }
+      }, 100)
+    },
+    [onVolumeChange],
+  )
 
-        const response = await fetch(
-          `https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(newVolume * 100)}&device_id=${deviceId}`,
-          {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${accessToken}`,
-              "Content-Type": "application/json",
-            },
-          },
-        )
-
-        if (!response.ok) {
-          const errorText = await response.text()
-          console.error("Error setting volume:", response.status, errorText)
-        }
-      } catch (error) {
-        console.error("Error setting volume:", error)
+  // Handle mute/unmute
+  const handleMuteToggle = useCallback(() => {
+    if (isMuted) {
+      // Unmute - restore previous volume
+      setIsMuted(false)
+      setVolume(previousVolume > 0 ? previousVolume : 0.5)
+      if (onVolumeChange) {
+        onVolumeChange(Math.round(previousVolume * 100))
+      }
+    } else {
+      // Mute - save current volume and set to 0
+      setIsMuted(true)
+      setPreviousVolume(volume)
+      setVolume(0)
+      if (onVolumeChange) {
+        onVolumeChange(0)
       }
     }
-  }
+  }, [isMuted, volume, previousVolume, onVolumeChange])
 
   const handleSeek = async (value: number[]) => {
     const seekTime = value[0]
@@ -182,15 +199,25 @@ export default function MusicPlayer({
     // Seek in Spotify player if we have access token
     if (accessToken) {
       try {
-        const response = await fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${Math.round(seekTime)}`, {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-        })
+        const deviceId = playerState?.device?.id
+        if (!deviceId) {
+          console.warn("No device ID available for seeking")
+          setIsSeeking(false)
+          return
+        }
 
-        if (!response.ok) {
+        const response = await fetch(
+          `https://api.spotify.com/v1/me/player/seek?position_ms=${Math.round(seekTime)}&device_id=${deviceId}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+          },
+        )
+
+        if (!response.ok && response.status !== 204) {
           const errorText = await response.text()
           console.error("Error seeking:", response.status, errorText)
         } else {
@@ -221,17 +248,27 @@ export default function MusicPlayer({
     }
   }, [playerState, isPlaying, onPlayPause])
 
-  // Add this function to directly control playback
+  // Improved play/pause handler with direct API call
   const handlePlayPauseAction = useCallback(() => {
-    if (!accessToken || !playerState?.device?.id) {
-      console.warn("Cannot control playback: missing token or device ID")
+    if (!accessToken) {
+      console.warn("Cannot control playback: missing token")
+      onPlayPause() // Still toggle the UI state
+      return
+    }
+
+    const deviceId = playerState?.device?.id
+    if (!deviceId) {
+      console.warn("Cannot control playback: missing device ID")
       onPlayPause() // Still toggle the UI state
       return
     }
 
     const endpoint = isPlaying
-      ? `https://api.spotify.com/v1/me/player/pause?device_id=${playerState.device.id}`
-      : `https://api.spotify.com/v1/me/player/play?device_id=${playerState.device.id}`
+      ? `https://api.spotify.com/v1/me/player/pause?device_id=${deviceId}`
+      : `https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`
+
+    // Optimistically update UI
+    onPlayPause()
 
     fetch(endpoint, {
       method: "PUT",
@@ -239,6 +276,13 @@ export default function MusicPlayer({
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
+      body:
+        !isPlaying && currentTrack?.uri
+          ? JSON.stringify({
+              uris: [currentTrack.uri],
+              position_ms: progress,
+            })
+          : undefined,
     })
       .then((response) => {
         if (!response.ok && response.status !== 204) {
@@ -246,32 +290,33 @@ export default function MusicPlayer({
             throw new Error(`Failed to ${isPlaying ? "pause" : "play"}: ${response.status} ${text}`)
           })
         }
-        onPlayPause() // Toggle the UI state after successful API call
       })
       .catch((error) => {
         console.error("Playback control error:", error)
+        // Revert UI state on error
+        onPlayPause()
         toast({
           title: "Playback Error",
           description: error.message,
           variant: "destructive",
         })
       })
-  }, [accessToken, isPlaying, onPlayPause, playerState?.device?.id, toast])
+  }, [accessToken, isPlaying, onPlayPause, playerState?.device?.id, toast, currentTrack?.uri, progress])
 
   if (!currentTrack) return null
 
   return (
-    <div className="flex items-center justify-between h-full px-4">
+    <div className="flex items-center justify-between h-full px-2 md:px-4">
       {/* Track info */}
-      <div className="flex items-center gap-3 w-1/3">
+      <div className="flex items-center gap-2 md:gap-3 w-1/3">
         <img
           src={currentTrack.album?.images[0]?.url || "/placeholder.svg?height=56&width=56"}
           alt={currentTrack.album?.name || "Album cover"}
-          className="h-14 w-14 rounded"
+          className="h-10 w-10 md:h-14 md:w-14 rounded"
         />
         <div className="min-w-0">
-          <p className="font-medium truncate">{currentTrack.name}</p>
-          <p className="text-sm text-muted-foreground truncate">
+          <p className="font-medium truncate text-sm md:text-base">{currentTrack.name}</p>
+          <p className="text-xs md:text-sm text-muted-foreground truncate">
             {currentTrack.artists?.map((a: any) => a.name).join(", ")}
           </p>
         </div>
@@ -298,7 +343,7 @@ export default function MusicPlayer({
         </div>
 
         <div className="flex items-center gap-2 w-full max-w-md">
-          <span className="text-xs text-white/70 w-8 text-right">{formatDuration(progress)}</span>
+          <span className="text-xs text-white/70 w-8 text-right hidden sm:block">{formatDuration(progress)}</span>
           <Slider
             value={[progress]}
             min={0}
@@ -307,7 +352,7 @@ export default function MusicPlayer({
             onValueChange={handleSeek}
             className="w-full"
           />
-          <span className="text-xs text-white/70 w-8">{formatDuration(duration)}</span>
+          <span className="text-xs text-white/70 w-8 hidden sm:block">{formatDuration(duration)}</span>
         </div>
       </div>
 
@@ -317,12 +362,10 @@ export default function MusicPlayer({
           size="icon"
           variant="ghost"
           className="text-white h-8 w-8"
-          onClick={() => {
-            const newVolume = volume > 0 ? 0 : 0.7
-            handleVolumeChange([newVolume])
-          }}
+          onClick={handleMuteToggle}
+          aria-label={isMuted ? "Unmute" : "Mute"}
         >
-          {volume === 0 ? (
+          {isMuted || volume === 0 ? (
             <VolumeX className="h-4 w-4" />
           ) : volume < 0.5 ? (
             <Volume1 className="h-4 w-4" />
@@ -330,7 +373,15 @@ export default function MusicPlayer({
             <Volume2 className="h-4 w-4" />
           )}
         </Button>
-        <Slider value={[volume]} min={0} max={1} step={0.01} onValueChange={handleVolumeChange} className="w-24" />
+        <Slider
+          value={[volume]}
+          min={0}
+          max={1}
+          step={0.01}
+          onValueChange={handleVolumeChange}
+          className="w-16 md:w-24 hidden sm:block"
+          aria-label="Volume"
+        />
       </div>
     </div>
   )
