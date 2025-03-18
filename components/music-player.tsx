@@ -38,6 +38,8 @@ export default function MusicPlayer({
   const lastUpdateTime = useRef<number>(Date.now())
   const lastPosition = useRef<number>(0)
   const { toast } = useToast()
+  const trackChangeTime = useRef<number>(Date.now())
+  const isTrackLoading = useRef<boolean>(false)
 
   // Update progress and duration from player state
   useEffect(() => {
@@ -56,6 +58,21 @@ export default function MusicPlayer({
     }
   }, [playerState, isSeeking])
 
+  // Track when the current track changes
+  useEffect(() => {
+    if (currentTrack) {
+      trackChangeTime.current = Date.now()
+      isTrackLoading.current = true
+
+      // Set a timeout to consider the track loaded after 2 seconds
+      const loadingTimeout = setTimeout(() => {
+        isTrackLoading.current = false
+      }, 2000)
+
+      return () => clearTimeout(loadingTimeout)
+    }
+  }, [currentTrack])
+
   // Update progress bar when playing
   useEffect(() => {
     // Clear any existing interval
@@ -64,7 +81,7 @@ export default function MusicPlayer({
       progressInterval.current = null
     }
 
-    if (isPlaying && !isSeeking) {
+    if (isPlaying && !isSeeking && !isTrackLoading.current) {
       // Start a new interval to update progress
       progressInterval.current = setInterval(() => {
         // Calculate elapsed time since last update from Spotify
@@ -81,6 +98,12 @@ export default function MusicPlayer({
           setProgress(duration)
           clearInterval(progressInterval.current!)
           progressInterval.current = null
+
+          // Auto-play next track when current track ends
+          if (now - trackChangeTime.current > 3000) {
+            // Only if track has been playing for at least 3 seconds
+            onNext()
+          }
         }
       }, 50) // Update more frequently (50ms) for smoother progress
     }
@@ -91,7 +114,7 @@ export default function MusicPlayer({
         progressInterval.current = null
       }
     }
-  }, [isPlaying, duration, isSeeking])
+  }, [isPlaying, duration, isSeeking, onNext, isTrackLoading.current])
 
   // Set duration when current track changes
   useEffect(() => {
@@ -115,16 +138,29 @@ export default function MusicPlayer({
     // Update Spotify player volume if we have access token
     if (accessToken) {
       try {
-        await fetch("https://api.spotify.com/v1/me/player/volume", {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
+        // Get the current device ID from the player state
+        const deviceId = playerState?.device?.id
+
+        if (!deviceId) {
+          console.warn("No device ID available for volume control")
+          return
+        }
+
+        const response = await fetch(
+          `https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(newVolume * 100)}&device_id=${deviceId}`,
+          {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
           },
-          body: JSON.stringify({
-            volume_percent: Math.round(newVolume * 100),
-          }),
-        })
+        )
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("Error setting volume:", response.status, errorText)
+        }
       } catch (error) {
         console.error("Error setting volume:", error)
       }
@@ -164,6 +200,19 @@ export default function MusicPlayer({
       setIsSeeking(false)
     }
   }
+
+  // Sync with player state when it changes
+  useEffect(() => {
+    if (playerState) {
+      // If the player state indicates a different play state than our local state,
+      // update our local state to match
+      if (playerState.paused !== undefined && isPlaying === playerState.paused) {
+        console.log("Syncing play state from player:", !playerState.paused)
+        // Notify parent component about the state change
+        onPlayPause()
+      }
+    }
+  }, [playerState, isPlaying, onPlayPause])
 
   if (!currentTrack) return null
 
@@ -220,7 +269,15 @@ export default function MusicPlayer({
 
       {/* Volume control */}
       <div className="flex items-center gap-2 w-1/3 justify-end">
-        <Button size="icon" variant="ghost" className="text-white h-8 w-8">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="text-white h-8 w-8"
+          onClick={() => {
+            const newVolume = volume > 0 ? 0 : 0.7
+            handleVolumeChange([newVolume])
+          }}
+        >
           {volume === 0 ? (
             <VolumeX className="h-4 w-4" />
           ) : volume < 0.5 ? (

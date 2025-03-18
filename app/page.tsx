@@ -324,7 +324,7 @@ export default function Home() {
 
       // Sync the UI play state with the actual Spotify player state
       // Only update if there's a mismatch to avoid loops
-      if (state && state.paused !== undefined && isPlaying === state.paused) {
+      if (state && state.paused !== undefined && isPlaying !== !state.paused) {
         console.log("Syncing play state from Spotify:", !state.paused)
         setIsPlaying(!state.paused)
       }

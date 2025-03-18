@@ -14,7 +14,7 @@ interface MoodTrack {
   artist_name: string
   album_name: string | null
   album_image_url: string | null
-  duration_ms?: number // Add duration field
+  duration_ms?: number // Make duration_ms optional
   added_at?: string // Optional because Supabase can handle the default
 }
 
@@ -60,7 +60,8 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
 
   // Ensure all required fields are present and properly formatted
   const tracksWithMoodId = validTracks.map((track) => {
-    return {
+    // Create a base object without duration_ms
+    const trackData: any = {
       mood_id: moodId,
       track_id: track.track_id || `unknown-${Date.now()}`,
       track_uri: track.track_uri || `spotify:track:unknown-${Date.now()}`,
@@ -68,9 +69,19 @@ export async function saveMoodTracks(moodId: string, tracks: Omit<MoodTrack, "mo
       artist_name: track.artist_name || "Unknown Artist",
       album_name: track.album_name || null,
       album_image_url: track.album_image_url || null,
-      duration_ms: track.duration_ms || 180000, // Use the actual duration or default to 3 minutes
       // Let Supabase handle the added_at timestamp with its default value
     }
+
+    // Only add duration_ms if it exists in the track
+    if (track.duration_ms) {
+      try {
+        trackData.duration_ms = track.duration_ms
+      } catch (e) {
+        console.warn("Could not add duration_ms to track data, column might not exist yet:", e)
+      }
+    }
+
+    return trackData
   })
 
   try {

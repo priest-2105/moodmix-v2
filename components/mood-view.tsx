@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Play, Pause, Clock, Heart, MoreHorizontal, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -18,6 +18,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import MusicPlayer from "@/components/music-player"
+import SpotifyWebPlayer from "@/components/spotify-web-player"
 
 interface MoodViewProps {
   mood: any
@@ -36,6 +37,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [currentTrack, setCurrentTrack] = useState<any>(null)
+  const [playerState, setPlayerState] = useState<any>(null)
 
   // Add debugging for mood data
   useEffect(() => {
@@ -79,7 +81,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
             name: track.album_name || "Unknown Album",
             images: [{ url: track.album_image_url || "/placeholder.svg?height=200&width=200" }],
           },
-          duration_ms: track.duration_ms || 180000, // Use actual duration from database or default
+          duration_ms: track.duration_ms || 180000, // Use actual duration from database or default to 3 minutes
           added_at: track.added_at,
         }))
 
@@ -124,7 +126,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
     setDominantColor(moodTypeColors[mood.mood_type] || moodTypeColors.default)
   }
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (tracks.length === 0) return
 
     const nextIndex = currentTrackIndex !== null ? (currentTrackIndex + 1) % tracks.length : 0
@@ -133,9 +135,9 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
     setIsPlaying(true)
     onTrackPlay(tracks[nextIndex])
     setCurrentTrack(tracks[nextIndex])
-  }
+  }, [currentTrackIndex, onTrackPlay, tracks])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (tracks.length === 0) return
 
     const prevIndex =
@@ -145,7 +147,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
     setIsPlaying(true)
     onTrackPlay(tracks[prevIndex])
     setCurrentTrack(tracks[prevIndex])
-  }
+  }, [currentTrackIndex, onTrackPlay, tracks])
 
   const handlePlay = (index: number) => {
     if (currentTrackIndex === index && isPlaying) {
@@ -190,6 +192,15 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
     }
   }
 
+  const handlePlayerStateChanged = useCallback((state: any) => {
+    setPlayerState(state)
+
+    // Update UI based on player state
+    if (state) {
+      setIsPlaying(!state.paused)
+    }
+  }, [])
+
   const handleDeleteMood = async () => {
     if (!mood?.id) return
 
@@ -222,8 +233,29 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
   // Get the correct image URL from either image_url or imageUrl property
   const moodImageUrl = mood.image_url || mood.imageUrl || `/placeholder.svg?height=200&width=200&text=${mood.name}`
 
+  // Get the current track URI for the Spotify player
+  const currentTrackUri = currentTrackIndex !== null && tracks[currentTrackIndex] ? tracks[currentTrackIndex].uri : null
+
   return (
     <div className="flex flex-col h-full">
+      {/* Spotify Web Player (invisible component) */}
+      {accessToken && (
+        <SpotifyWebPlayer
+          accessToken={accessToken}
+          currentTrackUri={currentTrackUri}
+          isPlaying={isPlaying}
+          onPlayerStateChanged={handlePlayerStateChanged}
+          onPlayerReady={() => console.log("Mood player ready")}
+          onError={(error) => {
+            console.error("Mood player error:", error)
+            toast({
+              title: "Player Error",
+              description: error,
+              variant: "destructive",
+            })
+          }}
+        />
+      )}
       {/* Header with background gradient using dominant color */}
       <div
         className="relative flex items-end p-8 h-[340px]"
@@ -388,7 +420,7 @@ export default function MoodView({ mood, accessToken, onTrackPlay, onMoodDelete 
             onPlayPause={() => setIsPlaying(!isPlaying)}
             onNext={handleNext}
             onPrevious={handlePrevious}
-            playerState={null}
+            playerState={playerState}
           />
         </div>
       )}

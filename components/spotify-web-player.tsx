@@ -36,6 +36,8 @@ export default function SpotifyWebPlayer({
   const pendingPlayRequest = useRef<{ uri: string; play: boolean } | null>(null)
   const { toast } = useToast()
   const playerState = useRef<any>(null)
+  const lastTrackUri = useRef<string | null>(null)
+  const trackLoadingTimeout = useRef<NodeJS.Timeout | null>(null)
 
   // Load Spotify Web Playback SDK script
   useEffect(() => {
@@ -63,6 +65,11 @@ export default function SpotifyWebPlayer({
     return () => {
       if (player) {
         player.disconnect()
+      }
+
+      // Clear any pending timeouts
+      if (trackLoadingTimeout.current) {
+        clearTimeout(trackLoadingTimeout.current)
       }
     }
   }, [accessToken])
@@ -155,35 +162,32 @@ export default function SpotifyWebPlayer({
           // Only process state updates every 100ms
           setLastStateUpdate(now)
 
-          console.log("Player state changed:", {
-            track: state.track_window.current_track.name,
-            paused: state.paused,
-            position: state.position,
-            duration: state.duration,
-          })
-
-          // Enhance the state with additional information
+          // Add device info to the state
           const enhancedState = {
             ...state,
-            // Add any additional properties needed
+            device: { id: deviceId },
             timestamp: now,
           }
 
-          // Only update the player state if it's a significant change
-          // This helps prevent unexpected pauses
-          const isSignificantChange =
+          // Log significant state changes
+          if (
             !playerState.current ||
             playerState.current?.track_window?.current_track?.uri !== state.track_window?.current_track?.uri ||
-            Math.abs(playerState.current?.position - state.position) > 3000 // More than 3 seconds difference
-
-          if (isSignificantChange) {
-            onPlayerStateChanged(enhancedState)
-            playerState.current = state
-          } else if (playerState.current?.paused !== state.paused) {
-            // Always update if play/pause state changes
-            onPlayerStateChanged(enhancedState)
-            playerState.current = state
+            playerState.current?.paused !== state.paused
+          ) {
+            console.log("Player state changed:", {
+              track: state.track_window.current_track.name,
+              paused: state.paused,
+              position: state.position,
+              duration: state.duration,
+            })
           }
+
+          // Always update the player state reference
+          playerState.current = state
+
+          // Always notify about state changes
+          onPlayerStateChanged(enhancedState)
         }
       })
 
@@ -214,22 +218,52 @@ export default function SpotifyWebPlayer({
     try {
       console.log("Transferring playback to device:", deviceId)
 
-      const response = await fetch("https://api.spotify.com/v1/me/player", {
-        method: "PUT",
+      // First, get the current playback state to check if we're already active
+      const currentPlaybackResponse = await fetch("https://api.spotify.com/v1/me/player", {
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          device_ids: [deviceId],
-          play: false,
-        }),
       })
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("Error transferring playback:", response.status, errorText)
-        throw new Error(`Failed to transfer playback: ${response.status} ${response.statusText}`)
+      // If we get a 204, it means no active device
+      const isNoActiveDevice = currentPlaybackResponse.status === 204
+
+      // If we get a 200, check if our device is already active
+      let isAlreadyActive = false
+      if (currentPlaybackResponse.status === 200) {
+        const currentPlayback = await currentPlaybackResponse.json()
+        isAlreadyActive = currentPlayback.device?.id === deviceId
+
+        console.log("Current playback state:", {
+          activeDevice: currentPlayback.device?.name,
+          isPlaying: currentPlayback.is_playing,
+          isOurDevice: isAlreadyActive,
+        })
+      }
+
+      // Only transfer if we're not already the active device
+      if (!isAlreadyActive) {
+        const response = await fetch("https://api.spotify.com/v1/me/player", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            device_ids: [deviceId],
+            play: false, // Don't auto-play when transferring
+          }),
+        })
+
+        if (!response.ok && response.status !== 204) {
+          const errorText = await response.text()
+          console.error("Error transferring playback:", response.status, errorText)
+          throw new Error(`Failed to transfer playback: ${response.status} ${response.statusText}`)
+        }
+
+        console.log("Playback transferred successfully")
+      } else {
+        console.log("Device is already active, no need to transfer")
       }
 
       return true
@@ -242,13 +276,34 @@ export default function SpotifyWebPlayer({
   // Function to play a track
   const playTrack = async (uri: string, shouldPlay: boolean, token: string, deviceId: string, playerInstance: any) => {
     try {
+      // Clear any existing timeout
+      if (trackLoadingTimeout.current) {
+        clearTimeout(trackLoadingTimeout.current)
+        trackLoadingTimeout.current = null
+      }
+
+      // Track has changed
+      const isNewTrack = uri !== lastTrackUri.current
+      lastTrackUri.current = uri
+
+      // Get current player state
+      const state = await playerInstance.getCurrentState()
+      const isCurrentTrack = state && state.track_window.current_track && state.track_window.current_track.uri === uri
+
+      console.log("Play track request:", {
+        uri,
+        shouldPlay,
+        isNewTrack,
+        isCurrentTrack,
+        currentState: state
+          ? {
+              paused: state.paused,
+              currentTrack: state.track_window.current_track.name,
+            }
+          : "No state",
+      })
+
       if (shouldPlay) {
-        console.log("Playing track:", uri)
-
-        // Get current player state to check if we're already playing this track
-        const state = await playerInstance.getCurrentState()
-        const isCurrentTrack = state && state.track_window.current_track && state.track_window.current_track.uri === uri
-
         if (isCurrentTrack && state.paused) {
           // If it's the same track but paused, just resume
           console.log("Resuming current track")
@@ -256,35 +311,50 @@ export default function SpotifyWebPlayer({
         } else if (!isCurrentTrack) {
           // If it's a different track, play it
           console.log("Playing new track via API")
-          const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify({
-              uris: [uri],
-              position_ms: 0, // Start from the beginning
-            }),
-          })
 
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error("Playback error response:", response.status, errorText)
-            throw new Error(`Failed to play track: ${response.status} ${response.statusText}`)
-          }
-
-          // After starting a new track, make sure we're not paused
-          setTimeout(() => {
-            playerInstance.resume().catch((err: any) => {
-              console.error("Error ensuring playback:", err)
+          try {
+            const response = await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
+              method: "PUT",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                uris: [uri],
+                position_ms: 0, // Start from the beginning
+              }),
             })
-          }, 500)
+
+            if (!response.ok) {
+              const errorText = await response.text()
+              console.error("Playback error response:", response.status, errorText)
+
+              // Try a fallback approach - sometimes the player needs to be resumed after setting the track
+              await playerInstance.resume()
+            }
+
+            // After starting a new track, give it some time to load before ensuring it's playing
+            trackLoadingTimeout.current = setTimeout(() => {
+              playerInstance.resume().catch((err: any) => {
+                console.error("Error ensuring playback:", err)
+              })
+              trackLoadingTimeout.current = null
+            }, 1000)
+          } catch (error) {
+            console.error("Error playing track via API:", error)
+            // Try direct player control as fallback
+            try {
+              await playerInstance.resume()
+            } catch (resumeError) {
+              console.error("Error with fallback resume:", resumeError)
+            }
+          }
         } else if (isCurrentTrack && !state.paused) {
           // Track is already playing, do nothing
           console.log("Track is already playing")
         }
       } else {
+        // Should pause
         console.log("Pausing playback")
         await playerInstance.pause()
       }

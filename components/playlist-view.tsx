@@ -151,7 +151,7 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
     [toast],
   )
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (!playerReady || tracks.length === 0) return
 
     const nextIndex = currentTrackIndex !== null ? (currentTrackIndex + 1) % tracks.length : 0
@@ -159,9 +159,9 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
     setCurrentTrackIndex(nextIndex)
     setIsPlaying(true)
     onTrackPlay(tracks[nextIndex])
-  }
+  }, [currentTrackIndex, onTrackPlay, playerReady, tracks])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (!playerReady || tracks.length === 0) return
 
     const prevIndex =
@@ -170,7 +170,7 @@ export default function PlaylistView({ playlist, accessToken, onTrackPlay }: Pla
     setCurrentTrackIndex(prevIndex)
     setIsPlaying(true)
     onTrackPlay(tracks[prevIndex])
-  }
+  }, [currentTrackIndex, onTrackPlay, playerReady, tracks])
 
   const totalDuration = tracks.reduce((acc, track) => acc + (track.duration_ms || 0), 0)
   const totalDurationFormatted = formatDuration(totalDuration)

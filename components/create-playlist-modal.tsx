@@ -325,32 +325,45 @@ export default function CreatePlaylistModal({
 
         // Save tracks to Supabase
         console.log(`Saving ${trackData.length} tracks for mood ID: ${savedMood.id}`)
-        await saveMoodTracks(savedMood.id, trackData)
+        try {
+          await saveMoodTracks(savedMood.id, trackData)
 
-        // Update UI
-        onMoodCreated({
-          ...savedMood,
-          tracks: trackData,
-        })
+          // Update UI
+          onMoodCreated({
+            ...savedMood,
+            tracks: trackData,
+          })
 
-        // Show success toast
-        toast({
-          title: "Mood Created",
-          description: `Your "${name}" mood has been created successfully with ${trackData.length} tracks.`,
-        })
+          // Show success toast
+          toast({
+            title: "Mood Created",
+            description: `Your "${name}" mood has been created successfully with ${trackData.length} tracks.`,
+          })
 
-        // Close modal
-        onClose()
+          // Close modal
+          onClose()
 
-        // Reset form
-        setName("")
-        setDescription("")
-        setSelectedMood("happy")
-        setSourceType("random")
-        setSourcePlaylist("")
-        setTrackCount(20)
-        setCustomImage(null)
-        setUseCustomImage(false)
+          // Reset form
+          setName("")
+          setDescription("")
+          setSelectedMood("happy")
+          setSourceType("random")
+          setSourcePlaylist("")
+          setTrackCount(20)
+          setCustomImage(null)
+          setUseCustomImage(false)
+        } catch (tracksError) {
+          console.error("Error saving tracks:", tracksError)
+
+          // Even if tracks failed to save, the mood was created
+          toast({
+            title: "Partial Success",
+            description: `Your "${name}" mood was created, but there was an issue saving the tracks. You may need to update your database schema.`,
+          })
+
+          // Close modal anyway since the mood was created
+          onClose()
+        }
       } catch (dbError) {
         console.error("Database error:", dbError)
         setError(`Database error: ${dbError instanceof Error ? dbError.message : "Unknown error"}`)
@@ -358,7 +371,8 @@ export default function CreatePlaylistModal({
         // Show error toast
         toast({
           title: "Error Creating Mood",
-          description: "There was a problem saving your mood to the database.",
+          description:
+            "There was a problem saving your mood to the database. You may need to update your database schema.",
           variant: "destructive",
         })
       }
