@@ -235,9 +235,9 @@ The create mood modal allows users to:
    - Ensure your Supabase project is active
    
 3. **Authentication Errors**
- - Verify your Spotify API credentials
- - Check that the redirect URI is correctly set up in the Spotify
- - Clear browser cookies and localStorage, then try again
+   - Verify your Spotify API credentials
+   - Check that the redirect URI is correctly set up in the Spotify
+   - Clear browser cookies and localStorage, then try again
 
 ## Contributing
 
