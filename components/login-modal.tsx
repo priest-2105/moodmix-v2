@@ -33,6 +33,9 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     }
   }, [searchParams])
 
+ 
+
+
   const handleLogin = () => {
     setIsLoading(true)
     setError(null)

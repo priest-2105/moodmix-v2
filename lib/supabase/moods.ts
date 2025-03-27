@@ -2,9 +2,9 @@ import { createClient } from "@supabase/supabase-js"
 import { validate as uuidValidate, version as uuidVersion } from "uuid"
 
 // Supabase configuration
+
 const supabaseUrl = process.env.SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_ANON_KEY
-
 // MoodTrack interface
 interface MoodTrack {
   mood_id: string
