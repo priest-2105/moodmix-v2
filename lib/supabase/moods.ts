@@ -3,7 +3,7 @@ import { validate as uuidValidate, version as uuidVersion } from "uuid"
 
 // Supabase configuration
 
-const supabaseUrl = process.env.SUPABASE_URL
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.SUPABASE_ANON_KEY
 // MoodTrack interface
 interface MoodTrack {

@@ -131,11 +131,11 @@ Create a `.env.local` file with the following variables:
 
 ```env
 # Spotify API Credentials
-SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+NEXT_PUBLIC_SPOTIFY_CLIENT_ID=your_NEXT_PUBLIC_SPOTIFY_CLIENT_ID_here
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
 
 # Supabase Connection Details
-SUPABASE_URL=your_supabase_url_here
+NEXT_PUBLIC_SUPABASE_URL=your_NEXT_PUBLIC_SUPABASE_URL_here
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key_here
 SUPABASE_ANON_KEY=your_supabase_anon_key_here
 ```
