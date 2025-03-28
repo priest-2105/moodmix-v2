@@ -4,8 +4,8 @@
 
 // Only use environment variables, never hardcode credentials
 const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || ""
-const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET || ""
-const REDIRECT_URI = "http://localhost:3000/callback"
+const CLIENT_SECRET = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_SECRET || ""
+const REDIRECT_URI =  process.env.NEXT_PUBLIC_REDIRECT_URL || "http://localhost:3000/callback"
 
 // Improve error handling in getSpotifyToken
 export async function getSpotifyToken(code: string) {

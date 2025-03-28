@@ -4,7 +4,7 @@
 const CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID || ""
 
 // Update the REDIRECT_URI to match what's in your Spotify Developer Dashboard
-const REDIRECT_URI = "http://localhost:3000/callback"
+const REDIRECT_URI = process.env.NEXT_PUBLIC_REDIRECT_URL ||  "http://localhost:3000/callback"
 
 // Make sure to include the streaming scope for Web Playback SDK
 const SCOPES = [
